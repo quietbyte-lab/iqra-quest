@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iqra Quest — audio workbench</title>
+<style>
+  :root{
+    --bg:#F4F6F5; --card:#fff; --ink:#1B302C; --soft:#576B66; --faint:#8B9A96;
+    --line:#DEE6E3; --teal:#0F6B63; --teal-soft:#E4F1EE; --green:#2C9C63; --amber:#D98A0B;
+    --red:#C0442E; --blue:#23539E; --sel:#FFF4DA;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0F1A18; --card:#182422; --ink:#E8F0ED; --soft:#9CB0AB; --faint:#7A8C88;
+    --line:#283835; --teal:#48B9AC; --teal-soft:#12302C; --green:#4FBE84; --amber:#E9A93C;
+    --red:#E8735A; --blue:#83AEEC; --sel:#33291083;}}
+  :root[data-theme=dark]{--bg:#0F1A18;--card:#182422;--ink:#E8F0ED;--soft:#9CB0AB;--faint:#7A8C88;
+    --line:#283835;--teal:#48B9AC;--teal-soft:#12302C;--green:#4FBE84;--amber:#E9A93C;--red:#E8735A;--blue:#83AEEC;--sel:#332910}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;line-height:1.5;font-size:15px}
+  .arabic{font-family:"Noto Naskh Arabic","Traditional Arabic","Amiri",serif}
+  header{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);
+    padding:12px 20px}
+  h1{font-size:19px;margin:0 0 2px}
+  .sub{font-size:12.5px;color:var(--soft);max-width:80ch}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .tab{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;
+    padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .tab.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .tab .dot{font-size:11px;opacity:.75;margin-inline-start:5px}
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:12.5px;color:var(--soft)}
+  main{padding:16px 20px 220px;max-width:1080px;margin:0 auto}
+  .cl{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+  .cl.done{border-color:var(--green);background:color-mix(in srgb,var(--green) 7%,var(--card))}
+  .cl.skip{opacity:.5}
+  .cl.other{border-style:dashed}
+  .clhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .badge{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:7px;background:var(--teal-soft);color:var(--teal)}
+  .badge.grey{background:var(--bg);color:var(--faint)}
+  .time{font-size:12px;color:var(--faint);font-weight:700;font-variant-numeric:tabular-nums}
+  .guess{font-size:12.5px;color:var(--soft);margin:9px 0 0;padding:6px 0 6px 10px;
+    border-inline-start:3px solid var(--amber)}
+  details#help{margin-top:10px;background:var(--teal-soft);border-radius:10px;padding:8px 12px}
+  details#help summary{cursor:pointer;font-weight:800;font-size:13px;color:var(--teal)}
+  .help-body{font-size:13px;color:var(--soft);margin-top:6px}
+  .help-body p{margin:7px 0}
+  .help-body ol{margin:7px 0;padding-inline-start:22px}
+  .help-body li{margin:5px 0}
+  .demo{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);
+    background:var(--card);border-radius:7px;padding:1px 5px;vertical-align:-3px}
+  .demo button{border:0;background:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--ink)}
+  .demo .star{font-size:11px;color:var(--amber)}
+  .demo .add{color:var(--teal);font-weight:800}
+  .replabel{font-size:12px;color:var(--soft);margin-top:9px}
+  .legend{font-size:11px;color:var(--faint);margin-top:-3px}
+  .ctrl-label{font-size:12.5px;font-weight:800;color:var(--soft)}
+  .guess b{color:var(--ink)}
+  .guess .g-let{font-size:20px;color:var(--blue);vertical-align:-2px}
+  .reps{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0}
+  .rep{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--bg);
+    border-radius:9px;padding:3px 4px 3px 8px}
+  .rep.picked{border-color:var(--amber);background:var(--sel)}
+  .rep button{border:0;background:none;cursor:pointer;font-family:inherit;font-size:12.5px;color:var(--ink);font-weight:700}
+  .rep .star{font-size:12px;opacity:.35}
+  .rep.picked .star{opacity:1}
+  .rep .add{font-size:13px;color:var(--teal);font-weight:800}
+  .rep.intray{outline:2px solid var(--teal)}
+  .ctrls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+  select,input[type=text],textarea{font-family:inherit;font-size:13px;padding:6px 9px;border-radius:9px;
+    border:1px solid var(--line);background:var(--card);color:var(--ink)}
+  textarea{width:100%;min-height:38px;resize:vertical;margin-top:7px}
+  button.act{border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;
+    cursor:pointer;font-family:inherit}
+  .play{background:var(--teal);color:#fff}
+  .ghost{background:var(--bg);color:var(--soft);border:1px solid var(--line)}
+  .tray{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);
+    border-top:1px solid var(--line);padding:10px 20px;box-shadow:0 -6px 24px rgba(0,0,0,.08)}
+  .tray-in{max-width:1080px;margin:0 auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .chips{display:flex;gap:5px;flex-wrap:wrap}
+  .chip{background:var(--teal-soft);color:var(--teal);border-radius:8px;padding:3px 8px;font-size:11.5px;font-weight:800}
+  .chip button{border:0;background:none;color:var(--red);cursor:pointer;font-weight:800;font-family:inherit}
+  .muted{color:var(--faint);font-size:12px}
+  .joins{margin-top:14px}
+  .join{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--amber);
+    border-radius:0 12px 12px 0;padding:9px 12px;margin-bottom:7px;font-size:13px}
+  h2{font-size:15px;margin:20px 0 8px;color:var(--teal)}
+  .sec{font-size:12px;color:var(--faint);font-weight:800;text-transform:uppercase;letter-spacing:.07em;margin:18px 0 6px}
+  code{background:var(--teal-soft);color:var(--teal);padding:2px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Audio workbench 🎧</h1>
+  <div class="sub">I chopped the teacher's lessons into small clips. I <b>cannot hear them</b>, so
+  my labels are guesses and are often wrong — you tell me what each one really is.</div>
+  <details id="help" open>
+    <summary>How this page works — read me first</summary>
+    <div class="help-body">
+      <p><b>Each white box below = one sound the teacher taught.</b> When he teaches a sound he
+      usually repeats it several times, so a box contains several recordings of the same thing.</p>
+      <ol>
+        <li><b>Press ▶ Play all</b> to hear the whole box, or press the numbered buttons
+        <span class="demo"><span class="star">★</span><button>1</button></span>
+        <span class="demo"><button>2</button></span>
+        <span class="demo"><button>3</button></span>
+        to hear each repetition on its own. <b>The numbers are just repetition 1, 2, 3…</b> —
+        the same sound said again.</li>
+        <li><b>Click the ★</b> on whichever repetition sounds clearest. That is the one that will
+        go into the app. (It starts on the longest one.)</li>
+        <li><b>Tell me what it is</b> in the “This clip is…” row: a letter sound, a word, only
+        useful for comparison, or not useful at all. Correct my guessed letter and vowel if needed.</li>
+        <li><b>Add a comment</b> if you want me to know how to use it.</li>
+      </ol>
+      <p><b>To join clips together</b> (e.g. to contrast س with ص): press the
+      <span class="demo"><button class="add">＋</button></span> on any recordings you want — from
+      any page — then use the bar at the bottom of the screen to preview and save them as one clip.</p>
+      <p class="muted">Your work saves automatically in this browser. Nothing goes into the app
+      until you export and I publish it. You do not have to do all of them.</p>
+    </div>
+  </details>
+  <div class="tabs" id="tabs"></div>
+  <div class="toolbar">
+    <label title="Hides clips that sound like the teacher explaining rather than drilling a sound">
+      <input type="checkbox" id="only-drill" checked> hide the talking bits</label>
+    <label title="Hides boxes you have already answered"><input type="checkbox" id="hide-done"> hide ones I've done</label>
+    <span id="progress" class="muted"></span>
+    <button class="act ghost" id="theme">◐ theme</button>
+  </div>
+</header>
+<main>
+  <div id="list"></div>
+  <div class="joins">
+    <h2>Joined / comparison clips</h2>
+    <div id="joinlist"></div>
+  </div>
+  <h2>Notes for me</h2>
+  <textarea id="notes" placeholder="Anything I should know: which letters sound confusable, how you'd like clips used, what to re-cut…"></textarea>
+</main>
+
+<div class="tray">
+  <div class="tray-in">
+    <b style="font-size:13px" title="Clips added here get glued into one audio file">🔗 Join into one clip</b>
+    <div class="chips" id="tray"><span class="muted">empty — press ＋ on any recording above to add it here</span></div>
+    <input type="text" id="jname" placeholder="call it e.g. seen-vs-saad" style="width:190px">
+    <select id="juse">
+      <option value="compare-sound">compare similar sounds</option>
+      <option value="compare-shape">compare similar shapes</option>
+      <option value="sequence">letter sequence</option>
+      <option value="word">word / phrase</option>
+      <option value="other">other</option>
+    </select>
+    <button class="act play" id="jplay" title="Hear the clips one after another">▶ hear it</button>
+    <button class="act ghost" id="jadd">✔ save this join</button>
+    <span style="flex:1"></span>
+    <button class="act play" id="export" title="Downloads your answers — put the file in the pipeline folder and tell Claude">⬇ Send my answers to Claude</button>
+  </div>
+</div>
+
+<script>
+const LETTERS = {'ا':'alif','ب':'baa','ت':'taa','ث':'thaa','ج':'jeem','ح':'haa','خ':'khaa','د':'dal',
+ 'ذ':'thal','ر':'raa','ز':'zay','س':'seen','ش':'sheen','ص':'saad','ض':'daad','ط':'taaheavy','ظ':'dhaa',
+ 'ع':'ayn','غ':'ghayn','ف':'faa','ق':'qaf','ك':'kaf','ل':'lam','م':'meem','ن':'noon','ه':'ha','و':'waw','ي':'yaa'};
+const MARK = {fathah:'َ', kasrah:'ِ', dhammah:'ُ'};
+const KEY = 'iqra-workbench';
+let DATA = null, cur = 0;
+let S = JSON.parse(localStorage.getItem(KEY) || '{}');
+S.clips = S.clips || {}; S.joins = S.joins || []; S.notes = S.notes || ''; S.picks = S.picks || {};
+let tray = [];
+const save = () => localStorage.setItem(KEY, JSON.stringify(S));
+
+if (localStorage.getItem('wb-theme')) document.documentElement.dataset.theme = localStorage.getItem('wb-theme');
+document.getElementById('theme').onclick = () => {
+  const d = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = d; localStorage.setItem('wb-theme', d);
+};
+
+fetch('clips.json').then(r => r.json()).then(d => { DATA = d; drawTabs(); draw(); drawJoins();
+  document.getElementById('notes').value = S.notes; })
+  .catch(() => document.getElementById('list').innerHTML =
+    '<p>Could not load <code>clips.json</code>. Run <code>python workbench.py build</code>, then serve this folder: <code>python -m http.server 8700 --directory pipeline</code></p>');
+
+document.getElementById('notes').oninput = e => { S.notes = e.target.value; save(); };
+document.getElementById('only-drill').onchange = draw;
+document.getElementById('hide-done').onchange = draw;
+
+function drawTabs() {
+  const t = document.getElementById('tabs'); t.innerHTML = '';
+  DATA.lessons.forEach((L, i) => {
+    const n = L.clusters.filter(c => S.clips[c.id]).length;
+    const b = document.createElement('button');
+    b.className = 'tab' + (i === cur ? ' on' : '');
+    b.innerHTML = `${L.title} <span class="dot">${n}/${L.clusters.length}</span>`;
+    b.onclick = () => { cur = i; drawTabs(); draw(); };
+    t.appendChild(b);
+  });
+}
+const fmt = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
+
+function playSeq(files, gap = 0.45) {
+  let i = 0;
+  const next = () => {
+    if (i >= files.length) return;
+    const a = new Audio(files[i++]);
+    a.onended = () => setTimeout(next, gap * 1000);
+    a.play().catch(() => {});
+  };
+  next();
+}
+
+function draw() {
+  const L = DATA.lessons[cur], list = document.getElementById('list');
+  const onlyDrill = document.getElementById('only-drill').checked;
+  const hideDone = document.getElementById('hide-done').checked;
+  list.innerHTML = '';
+  let shown = 0;
+  for (const c of L.clusters) {
+    if (onlyDrill && !c.likelyDrill) continue;
+    if (hideDone && S.clips[c.id]) continue;
+    shown++;
+    const lab = S.clips[c.id] || {};
+    const div = document.createElement('div');
+    div.className = 'cl' + (lab.kind && lab.kind !== 'skip' ? ' done' : '')
+      + (lab.kind === 'skip' ? ' skip' : '') + (c.likelyDrill ? '' : ' other');
+    const g = c.guess || {};
+    // Only offer a guess when there is real evidence — a low-confidence guess is noise
+    // and guessing wrongly is what misled the labelling last time.
+    const confident = g.letter && g.conf !== 'low';
+    const gTxt = confident
+      ? `💭 <b>I think this is <span class="g-let arabic">${g.letter}${MARK[L.vowel]}</span>
+         “${LETTERS[g.letter]}”</b> <span class="muted">— ${g.conf} confidence, and I may still be
+         wrong.</span><br><span class="muted">${g.why || ''}</span>`
+      : `💭 <b>I don't know what this one is</b> — please tell me.
+         ${g.why ? `<br><span class="muted">${g.why}</span>` : ''}`;
+    div.innerHTML = `
+      <div class="clhead">
+        <button class="act play" data-all>▶ Play all</button>
+        <span class="time">at ${fmt(c.start)} in the video</span>
+        <span class="badge${c.likelyDrill ? '' : ' grey'}">${c.likelyDrill
+          ? `teacher repeated this ${c.n}×` : 'probably just talking'}</span>
+      </div>
+      <div class="guess">${gTxt}</div>
+      <div class="replabel">Hear each repetition — <b>they are all the same sound</b>, said again:</div>
+      <div class="reps"></div>
+      <div class="legend">★ = use this one in the app &nbsp;·&nbsp; ＋ = add to the join bar at the bottom</div>
+      <div class="ctrls">
+        <span class="ctrl-label">This clip is…</span>
+        <select data-kind>
+          <option value="">— choose —</option>
+          <option value="letter">a letter sound</option>
+          <option value="word">a word / phrase</option>
+          <option value="compare">only useful for comparison</option>
+          <option value="skip">not useful — ignore it</option>
+        </select>
+        <select data-letter><option value="">letter…</option>${
+          Object.entries(LETTERS).map(([l, k]) => `<option value="${l}">${l} · ${k}</option>`).join('')}</select>
+        <select data-vowel>${['fathah','kasrah','dhammah'].map(v =>
+          `<option value="${v}" ${v === L.vowel ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <input class="arabic" type="text" data-word placeholder="type the word…" style="width:130px;font-size:17px;display:none">
+        <input type="text" data-comment placeholder="comment / how to use this" style="flex:1;min-width:180px">
+      </div>`;
+    // repetitions
+    const reps = div.querySelector('.reps');
+    const picked = S.picks[c.id] ?? c.reps.reduce((b, r, i) => c.reps[b].dur >= r.dur ? b : i, 0);
+    c.reps.forEach((r, i) => {
+      const el = document.createElement('span');
+      el.className = 'rep' + (i === picked ? ' picked' : '') + (tray.includes(r.id) ? ' intray' : '');
+      el.innerHTML = `<span class="star">★</span><button data-play>${i + 1}</button>
+                      <span class="muted">${r.dur}s</span><button class="add" data-add>＋</button>`;
+      el.querySelector('[data-play]').onclick = () => new Audio('clips/' + r.file).play().catch(() => {});
+      el.querySelector('.star').onclick = () => { S.picks[c.id] = i; save(); draw(); };
+      el.querySelector('[data-add]').onclick = () => {
+        if (!tray.includes(r.id)) tray.push(r.id);
+        drawTray(); draw();
+      };
+      reps.appendChild(el);
+    });
+    div.querySelector('[data-all]').onclick = () => playSeq(c.reps.map(r => 'clips/' + r.file), 0.3);
+    // controls
+    const kind = div.querySelector('[data-kind]'), letter = div.querySelector('[data-letter]');
+    const vowel = div.querySelector('[data-vowel]'), comment = div.querySelector('[data-comment]');
+    const wordIn = div.querySelector('[data-word]');
+    kind.value = lab.kind || '';
+    letter.value = lab.letter || (confident ? g.letter : '');
+    vowel.value = lab.vowel || L.vowel;
+    comment.value = lab.comment || '';
+    wordIn.value = lab.word || '';
+    const syncFields = () => {
+      const isWord = kind.value === 'word';
+      wordIn.style.display = isWord ? '' : 'none';
+      letter.style.display = (kind.value === 'letter' || kind.value === 'compare') ? '' : 'none';
+      vowel.style.display = letter.style.display;
+    };
+    syncFields();
+    const commit = () => {
+      if (!kind.value) { delete S.clips[c.id]; }
+      else {
+        const rep = c.reps[S.picks[c.id] ?? picked];
+        S.clips[c.id] = {kind: kind.value, letter: letter.value || null, vowel: vowel.value,
+                         word: wordIn.value.trim() || null, comment: comment.value,
+                         take: rep.id, page: L.page, asr: c.asr};
+      }
+      // reflect state inline — a full redraw here would lose scroll position
+      div.classList.toggle('done', !!kind.value && kind.value !== 'skip');
+      div.classList.toggle('skip', kind.value === 'skip');
+      save(); drawTabs(); progress();
+    };
+    kind.onchange = () => { syncFields(); commit(); };
+    letter.onchange = vowel.onchange = commit;
+    comment.oninput = wordIn.oninput = commit;
+    list.appendChild(div);
+  }
+  if (!shown) list.innerHTML = '<p class="muted">Nothing to show with these filters.</p>';
+  progress();
+}
+function progress() {
+  const all = DATA.lessons.flatMap(l => l.clusters);
+  const done = all.filter(c => S.clips[c.id]).length;
+  document.getElementById('progress').textContent =
+    `${done} of ${all.length} clusters labelled · ${S.joins.length} joins`;
+}
+function drawTray() {
+  const t = document.getElementById('tray');
+  if (!tray.length) { t.innerHTML = '<span class="muted">click ➕ on any clip to add it</span>'; return; }
+  t.innerHTML = '';
+  tray.forEach((id, i) => {
+    const s = document.createElement('span');
+    s.className = 'chip';
+    s.innerHTML = `${id} <button>✕</button>`;
+    s.querySelector('button').onclick = () => { tray.splice(i, 1); drawTray(); draw(); };
+    t.appendChild(s);
+  });
+}
+function fileFor(id) {
+  const [tag, ci, ri] = id.split('-');
+  return `clips/${tag}/${ci}_${ri}.mp3`;
+}
+document.getElementById('jplay').onclick = () => playSeq(tray.map(fileFor), 0.45);
+document.getElementById('jadd').onclick = () => {
+  if (tray.length < 1) return alert('Add some clips to the tray first.');
+  const name = document.getElementById('jname').value.trim() || ('join-' + (S.joins.length + 1));
+  S.joins.push({name, clips: [...tray], use: document.getElementById('juse').value, gap: 0.45, comment: ''});
+  tray = []; document.getElementById('jname').value = '';
+  save(); drawTray(); drawJoins(); progress();
+};
+function drawJoins() {
+  const w = document.getElementById('joinlist');
+  if (!S.joins.length) { w.innerHTML = '<p class="muted">No joins yet — use the tray at the bottom.</p>'; return; }
+  w.innerHTML = '';
+  S.joins.forEach((j, i) => {
+    const d = document.createElement('div');
+    d.className = 'join';
+    d.innerHTML = `<b>${j.name}</b> <span class="muted">${j.use} · ${j.clips.length} clips</span>
+      <button class="act play" data-p>▶</button> <button class="act ghost" data-x>remove</button>
+      <input type="text" placeholder="what is this for?" value="${j.comment || ''}" style="width:100%;margin-top:6px">`;
+    d.querySelector('[data-p]').onclick = () => playSeq(j.clips.map(fileFor), j.gap);
+    d.querySelector('[data-x]').onclick = () => { S.joins.splice(i, 1); save(); drawJoins(); progress(); };
+    d.querySelector('input').oninput = e => { j.comment = e.target.value; save(); };
+    w.appendChild(d);
+  });
+}
+document.getElementById('export').onclick = () => {
+  const clips = {};
+  for (const [cid, lab] of Object.entries(S.clips)) {
+    if (!lab || !lab.kind || lab.kind === 'skip') continue;
+    clips[lab.take || cid] = lab;          // key by the chosen take so publish can find the file
+  }
+  const blob = new Blob([JSON.stringify({clips, joins: S.joins, notes: S.notes, picks: S.picks}, null, 1)],
+                        {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'labels.json'; a.click();
+};
+</script>
+</body>
+</html>

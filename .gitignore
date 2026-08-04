@@ -1,0 +1,22 @@
+# ── The teacher's voice and video ──────────────────────────────────────────
+# Never commit these: keep them local until the channel owner approves public
+# distribution. Nothing here may reach GitHub Pages.
+pipeline/media/
+pipeline/work/
+pipeline/review/
+pipeline/clips/
+pipeline/joined/
+pipeline/clips.json
+pipeline/labels.json
+pipeline/approvals.json
+app/audio/
+# belt and braces — no stray audio anywhere
+*.mp3
+*.m4a
+*.wav
+
+# the book scan itself
+*.pdf
+
+__pycache__/
+.claude/settings.local.json

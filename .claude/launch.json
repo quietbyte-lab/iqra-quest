@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "iqra-quest",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8642", "--directory", "app"],
+      "port": 8642
+    },
+    {
+      "name": "verify-audio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8700", "--directory", "pipeline"],
+      "port": 8700
+    }
+  ]
+}
