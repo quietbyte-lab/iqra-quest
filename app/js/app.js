@@ -4,6 +4,8 @@
 // ---------------- state ----------------
 const STORE_KEY = 'iqra-quest-v1';
 const DEFAULT_STATE = {
+  gems: 0, certificates: [], unlocks: [],         // revision currency + what it bought
+  stickers: [], chestCount: 0,                    // sticker album + chests since last reward
   stars: 0, lang: 'en', weekStart: 6,            // 6 = Saturday
   homework: null,                                 // {newPages:[], revFrom, revTo}
   firstDone: {}, completions: {},                 // per page
@@ -35,9 +37,17 @@ function weekStartDate(ref = new Date()) {
   while (d.getDay() !== state.weekStart) d.setDate(d.getDate() - 1);
   return d;
 }
+// The week runs from the chosen start day to the chosen end day, so it can be shorter
+// than 7 days (e.g. Mon->Thu) when the teacher only sets homework for part of the week.
+function weekLength() {
+  const end = state.weekEnd == null ? (state.weekStart + 6) % 7 : state.weekEnd;
+  return ((end - state.weekStart + 7) % 7) + 1;
+}
 function weekDates() {
   const s = weekStartDate(), out = [];
-  for (let i = 0; i < 7; i++) { const d = new Date(s); d.setDate(s.getDate() + i); out.push(dkey(d)); }
+  for (let i = 0; i < weekLength(); i++) {
+    const d = new Date(s); d.setDate(s.getDate() + i); out.push(dkey(d));
+  }
   return out;
 }
 const weekKey = () => dkey(weekStartDate());
@@ -51,10 +61,17 @@ function revPool() {
   for (let p = hw.revFrom; p <= hw.revTo; p++) if (BOOK.pages[p]) out.push(p);
   return out;
 }
-function revAssignedTo(dayIdx) {                   // days 0..5 round-robin; day 6 = catch-up
+// The parent picks how many revision pages per day; the pool then CYCLES so the whole
+// range keeps coming back round. With 24-29 at 3/day: Mon 24,25,26 · Tue 27,28,29 ·
+// Wed 24,25,26 again, and so on — spaced repetition rather than a one-time deal-out.
+function revAssignedTo(dayIdx) {
   const pool = revPool();
-  if (dayIdx <= 5) return pool.filter((_, i) => i % 6 === dayIdx);
-  return pool.filter(p => !revDoneThisWeek(p));
+  if (!pool.length) return [];
+  const per = Math.max(1, state.homework?.revPerDay || 1);
+  const start = (dayIdx * per) % pool.length;
+  const out = [];
+  for (let i = 0; i < Math.min(per, pool.length); i++) out.push(pool[(start + i) % pool.length]);
+  return out;
 }
 function revDoneThisWeek(p) { return weekDates().some(dk => state.daily[dk] && state.daily[dk]['rev-' + p]); }
 function dayRecord(dateKey = todayKey()) { return state.daily[dateKey] || {}; }
@@ -66,9 +83,10 @@ function tasksFor(dateKey = todayKey()) {
     const first = !state.firstDone[p];
     tasks.push({ id: 'new-' + p, page: p, kind: first ? 'learn' : 'daily', done: !!rec['new-' + p] });
   }
+  // Revision repeats across the week now, so "done" is per-day, never per-week —
+  // otherwise Wednesday's repeat of page 24 would arrive already ticked off.
   for (const p of revAssignedTo(di === -1 ? 0 : di)) {
-    if (di === 6 && revDoneThisWeek(p)) continue;
-    tasks.push({ id: 'rev-' + p, page: p, kind: 'rev', done: !!rec['rev-' + p] || revDoneThisWeek(p) });
+    tasks.push({ id: 'rev-' + p, page: p, kind: 'rev', done: !!rec['rev-' + p] });
   }
   // learn tasks first? keep book order: dailies (known) first, then first-time, then revision
   tasks.sort((a, b) => (a.kind === 'rev') - (b.kind === 'rev') || (a.kind === 'learn') - (b.kind === 'learn') || a.page - b.page);
@@ -164,14 +182,128 @@ function bumpStars(n) {
   const pill = $('#stars-pill'); pill.textContent = '⭐ ' + state.stars;
   pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump');
 }
-function starBurst(x, y, count = 6) {
+// Revision earns gems, one per WORD — a reward only at the end of a page gives a child
+// nothing to pull them THROUGH the page, which is where they give up. Each gem is worth
+// less than a star, so new pages stay the bigger prize.
+function bumpGems(n) {
+  state.gems = (state.gems || 0) + n; save();
+  const pill = $('#gems-pill');
+  if (!pill) return;
+  pill.hidden = false;
+  pill.textContent = '💎 ' + state.gems;
+  pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump');
+}
+// One big star per correct reading, flying from the word up to the star counter.
+function flyingStar(x, y, glyph = '⭐') {
+  const target = glyph === '💎' && $('#gems-pill') ? $('#gems-pill') : $('#stars-pill');
+  const pill = target.getBoundingClientRect();
+  const s = el('div', 'fly-star', glyph);
+  s.style.left = x + 'px'; s.style.top = y + 'px';
+  s.style.setProperty('--tx', (pill.left + pill.width / 2 - x) + 'px');
+  s.style.setProperty('--ty', (pill.top + pill.height / 2 - y) + 'px');
+  document.body.appendChild(s);
+  setTimeout(() => s.remove(), 1100);
+  const plus = el('div', 'plus-one', '+1');
+  plus.style.left = x + 'px'; plus.style.top = y + 'px';
+  document.body.appendChild(plus);
+  setTimeout(() => plus.remove(), 900);
+}
+function starBurst(x, y, count = 6, glyph = '⭐') {
   for (let i = 0; i < count; i++) {
-    const s = el('span', 'burst', '⭐');
+    const s = el('span', 'burst', glyph);
     s.style.left = x + 'px'; s.style.top = y + 'px';
     s.style.setProperty('--dx', Math.round(Math.cos(i / count * 6.28) * 90) + 'px');
     s.style.setProperty('--dy', Math.round(Math.sin(i / count * 6.28) * 90 - 60) + 'px');
     document.body.appendChild(s); setTimeout(() => s.remove(), 1000);
   }
+}
+// ---------------- sticker rewards ----------------
+// A guaranteed sticker for finishing a page, plus a surprise one every few chests.
+// The unpredictable one is deliberate: a variable reward schedule sustains interest
+// far better than a fixed "every N" payout, which children quickly learn to discount.
+const chapterFor = page => CHAPTERS.find(c => page >= c.from && page <= c.to) || CHAPTERS[0];
+
+// Certificates earned with gems — the revision payoff you can print and take to the
+// teacher. Thresholds rise so each one takes a real stretch of revision to reach.
+const CERTIFICATES = [
+  { id: 'c1', gems: 50, key: 'certSteady' },
+  { id: 'c2', gems: 150, key: 'certStrong' },
+  { id: 'c3', gems: 300, key: 'certExpert' },
+  { id: 'c4', gems: 600, key: 'certMaster' },
+];
+function checkCertificates() {
+  const earned = CERTIFICATES.filter(c => (state.gems || 0) >= c.gems && !state.certificates.includes(c.id));
+  if (!earned.length) return;
+  const c = earned[0];
+  state.certificates.push(c.id); save(); SFX.mission(); confetti();
+  const ov = overlay(`<div class="big-emoji">📜✨</div>
+    <h4>${t('certEarned')}</h4>
+    <p class="muted">${t(c.key)} · ${c.gems} 💎</p>
+    <button class="btn primary big" data-print>${t('printIt')}</button>
+    <button class="btn ghost big" style="margin-top:8px" data-close>${t('later')}</button>`);
+  ov.querySelector('[data-print]').addEventListener('click', () => { ov.remove(); printCertificate(c); });
+  ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
+}
+function printCertificate(c) {
+  const w = window.open('', '_blank');
+  if (!w) return toast(t('allowPopups'));
+  const today = new Date().toLocaleDateString();
+  const pages = Object.keys(state.completions).length;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>${t('certificate')}</title><style>
+    @page{size:A4 landscape;margin:0}
+    body{margin:0;font-family:Georgia,serif;display:grid;place-items:center;height:100vh;
+      background:#FFFDF7;color:#1B302C}
+    .cert{border:14px double #C9A227;border-radius:12px;padding:44px 60px;text-align:center;width:80%}
+    h1{font-size:40px;margin:.1em;color:#0F6B63;letter-spacing:.02em}
+    .ar{font-family:"Amiri",serif;font-size:34px;color:#23539E;margin:6px 0 18px}
+    .name{font-size:30px;margin:16px 0 6px;border-bottom:2px dotted #C9A227;display:inline-block;
+      padding:0 40px 6px}
+    p{font-size:17px;color:#5C6F6B;margin:8px 0}
+    .stats{margin-top:18px;font-size:15px;color:#8A5A00;font-weight:bold}
+    .foot{margin-top:26px;font-size:13px;color:#8B9490}
+    </style></head><body><div class="cert">
+      <div style="font-size:52px">📜</div>
+      <h1>${t(c.key)}</h1>
+      <div class="ar">شهادة تقدير</div>
+      <p>${t('certAwarded')}</p>
+      <div class="name">&nbsp;</div>
+      <p>${t('certFor')}</p>
+      <div class="stats">💎 ${state.gems} &nbsp;·&nbsp; ⭐ ${state.stars} &nbsp;·&nbsp; ${t('certPages')(pages)}</div>
+      <div class="foot">Iqra Quest — رحلة اقرأ &nbsp;·&nbsp; ${today}</div>
+    </div><script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+}
+
+// A souvenir from the region the child just read in — the reward names the place,
+// so collecting and travelling are the same act rather than two unrelated systems.
+function awardSticker(page) {
+  const ch = chapterFor(page);
+  const owned = new Set(state.stickers);
+  let pool = stickersOf(ch.id).filter(e => !owned.has(e));
+  let from = ch;
+  if (!pool.length) {                                  // this region fully collected
+    const other = ALL_STICKERS.filter(s => !owned.has(s.e));
+    if (!other.length) return null;
+    const pick = other[Math.floor(Math.random() * other.length)];
+    pool = [pick.e];
+    from = CHAPTERS.find(c => c.id === pick.set) || ch;
+  }
+  const e = pool[Math.floor(Math.random() * pool.length)];
+  state.stickers.push(e);
+  save();
+  const items = stickersOf(from.id);
+  const have = items.filter(x => state.stickers.includes(x)).length;
+  const done = have === items.length;
+  SFX.sticker();
+  const ov = overlay(`
+    <div class="sticker-pop">${e}</div>
+    <h4>${t('foundIn')(from.icon, t('chapters')[from.id])}</h4>
+    <p class="muted">${t('regionCount')(have, items.length)}</p>
+    ${done ? `<p style="font-weight:800;color:var(--green)">${t('regionComplete')(t('chapters')[from.id])}</p>` : ''}
+    <button class="btn primary big" data-close>${t('addToAlbum')}</button>`);
+  ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
+  return e;
 }
 function confetti() {
   const em = ['🎉', '⭐', '✨', '🎊', '🌟'];
@@ -189,9 +321,112 @@ function overlay(innerHTML, onMount) {
   return ov;
 }
 
+// ---- calligraphic styles ----
+// Each entry names a real style plus the fonts that render it. A style is only offered
+// when one of its fonts is genuinely installed, checked by measuring rendered width
+// against a known-missing font.
+const STYLES = [
+  { key: 'naskh',  cls: 'st-naskh',  i18n: 'styleNaskh',  fonts: ['Amiri', 'Noto Naskh Arabic', 'Traditional Arabic', 'Scheherazade New'] },
+  { key: 'kufi',   cls: 'st-kufi',   i18n: 'styleKufi',   fonts: ['Reem Kufi', 'Noto Kufi Arabic'] },
+  { key: 'ruqaa',  cls: 'st-ruqaa',  i18n: 'styleRuqaa',  fonts: ['Aref Ruqaa', 'Arabic Typesetting'] },
+  { key: 'modern', cls: 'st-modern', i18n: 'stylePlain',  fonts: ['Segoe UI', 'Tahoma', 'Arial'] },
+];
+let _styleCache = null;
+function fontAvailable(name) {
+  const probe = 'ابجدهوز';
+  const mk = family => {
+    const s = document.createElement('span');
+    s.textContent = probe;
+    s.style.cssText = `position:absolute;visibility:hidden;font-size:64px;white-space:nowrap;font-family:${family}`;
+    document.body.appendChild(s);
+    const w = s.getBoundingClientRect().width;
+    s.remove();
+    return w;
+  };
+  const base = mk('"__nope__", monospace');
+  return Math.abs(mk(`"${name}", "__nope__", monospace`) - base) > 0.6;
+}
+function availableStyles() {
+  if (_styleCache) return _styleCache;
+  const seen = new Set();
+  _styleCache = STYLES.filter(s => {
+    const font = s.fonts.find(fontAvailable);
+    if (!font || seen.has(font)) return false;
+    seen.add(font);
+    s.font = font;
+    return true;
+  });
+  return _styleCache;
+}
+
+// Find real words from the book showing this letter at the start, middle and end.
+// Prefers the pages the child has already reached, so examples feel familiar.
+// Does this word actually form a ligature/stack? rlig on-vs-off changes its width when
+// it does (ح tucking under س, the س-م join, the looped medial ه). Those are exactly the
+// shapes worth showing, so they get picked first.
+let _ligCache = {};
+function hasLigature(word) {
+  if (word in _ligCache) return _ligCache[word];
+  const mk = rlig => {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:absolute;visibility:hidden;font-size:70px;white-space:nowrap;' +
+      `direction:rtl;font-family:"Amiri";font-feature-settings:"rlig" ${rlig}`;
+    d.textContent = word;
+    document.body.appendChild(d);
+    const w = d.getBoundingClientRect().width;
+    d.remove();
+    return w;
+  };
+  const on = mk(1), off = mk(0);
+  return (_ligCache[word] = Math.abs(on - off) / Math.max(on, off) > 0.03);
+}
+// Several real words per position, tricky joins first.
+function bookExamples(letter, perPos = 3) {
+  const seen = new Set(), out = [];
+  for (const pos of ['start', 'middle', 'end']) {
+    const found = [];
+    for (const [p, meta] of Object.entries(BOOK.pages)) {
+      const items = meta.type === 'letters' ? (meta.strip || []) : (meta.words || []);
+      for (const w of items) {
+        if (w.length > 16 || seen.has(w) || found.some(f => f.word === w)) continue;
+        const base = baseLettersOf(w);
+        const i = base.indexOf(letter);
+        if (i < 0 || base.length < 2) continue;
+        const where = i === 0 ? 'start' : i === base.length - 1 ? 'end' : 'middle';
+        if (where !== pos) continue;
+        // Pages 20/25 drill letter PAIRS (بَبِ، يَيُ) and some cells are joined-up
+        // fragments ending in tatweel. Neither is a word, so they make poor examples.
+        const drillPair = base.length === 2 && base[0] === base[1];
+        const fragment = w.includes('ـ');
+        found.push({ word: w, page: +p, n: base.length, real: !drillPair && !fragment });
+      }
+    }
+    // real words first, then ones showing a ligature, then shorter (easier to read)
+    found.sort((a, b) => (b.real - a.real)
+      || (hasLigature(b.word) - hasLigature(a.word)) || a.n - b.n);
+    for (const f of found.slice(0, perPos)) {
+      seen.add(f.word);
+      out.push({ ...f, posKey: pos, lig: hasLigature(f.word) });
+    }
+  }
+  return out;
+}
+// wrap just the target letter so the child can see it inside the joined word
+function markLetter(word, letter) {
+  let html = '', open = false;
+  for (const ch of word) {
+    if (/[ً-ْٰ]/.test(ch)) { html += ch; continue; }
+    if (ch === 'ـ') { html += ch; continue; }
+    if (open) { html += '</span>'; open = false; }
+    if (baseLetter(ch) === letter) { html += `<span class="hit">${ch}`; open = true; }
+    else html += ch;
+  }
+  return html + (open ? '</span>' : '');
+}
+
 // letter card popover
 function showLetterCard(L, { log = false } = {}) {
-  const b = baseLetter(L); const info = LETTERS[b];
+  const b = cardFor(L); const info = LETTERS[b];
   if (!info) return;
   if (log) { const wk = weekKey(); state.lookups[wk] = state.lookups[wk] || {}; state.lookups[wk][b] = (state.lookups[wk][b] || 0) + 1; save(); }
   const lbls = [t('alone'), t('start'), t('middle'), t('end')];
@@ -199,16 +434,56 @@ function showLetterCard(L, { log = false } = {}) {
   const sndBtn = v => vs.includes(v)
     ? `<button class="snd" data-v="${v}">${b}<span class="h">${VOWEL_MARKS[v]}</span></button>`
     : `<button class="snd off" disabled>${b}${VOWEL_MARKS[v]}</button>`;
-  const ov = overlay(`<div class="lcard">
-    <h4>${t('letterCard')} · <span class="arabic">${b}</span> (${info.name})</h4>
+  // LEVEL 1 — the basics: this letter's four positions, plus its sounds.
+  const level1 = `
     <div class="muted">${t('shapes4')}</div>
-    <div class="frm arabic">${info.forms.map((f, i) => `<div class="fc"><span class="g">${f}</span><span class="l">${lbls[i]}</span></div>`).join('')}</div>
+    <div class="frm arabic">${info.forms.map((f, i) =>
+      `<div class="fc"><span class="g">${f}</span><span class="l">${lbls[i]}</span></div>`).join('')}</div>
     <div class="muted" style="margin-top:8px">${t('letterSounds')}</div>
     <div class="snd-row arabic">${sndBtn('fathah')}${sndBtn('kasrah')}${sndBtn('dhammah')}</div>
-    <div class="muted" style="margin-top:6px">${t('greyLater')}</div>
+    ${vs.length < 3 ? `<div class="muted" style="margin-top:6px">${t('greyLater')}</div>` : ''}`;
+  // Real words from the book, on the SAME card — an abstract ـعـ never shows the
+  // ligatures the child actually meets, and hiding them behind a tab meant they were
+  // rarely seen. Grouped by position, tricky joins first.
+  // Each example is shown TWICE — the classical Naskh (Amiri, with its stacked joins)
+  // beside the simplified Naskh (Noto). Seeing them side by side is the point: it proves
+  // the two are the same letter rather than two different symbols to learn.
+  const ex = bookExamples(b, 2);
+  const group = pos => {
+    const rows = ex.filter(e => e.posKey === pos);
+    if (!rows.length) return '';
+    return `<div class="ex-group"><div class="ex-pos">${t(pos)}</div>
+      ${rows.map(e => `<div class="ex-pair">
+        <button class="ex-w st-classical" data-say="${e.word}" title="${t('pageWord')} ${e.page}">
+          ${markLetter(e.word, b)}<small>${t('styleClassical')}</small></button>
+        <span class="ex-eq">=</span>
+        <button class="ex-w st-simple" data-say="${e.word}" title="${t('pageWord')} ${e.page}">
+          ${markLetter(e.word, b)}<small>${t('styleSimple')}</small></button>
+      </div>`).join('')}</div>`;
+  };
+  const examples = ex.length ? `
+    <div class="muted" style="margin-top:12px">${t('inRealWords')}</div>
+    ${group('start')}${group('middle')}${group('end')}
+    <div class="muted" style="font-size:11px;margin-top:4px">${t('sameLetterHint')}</div>`
+    : `<div class="muted" style="margin-top:10px">${t('noExamples')}</div>`;
+
+  const ov = overlay(`<div class="lcard">
+    <h4>${t('letterCard')} · <span class="arabic">${b}</span> (${info.name})</h4>
+    ${level1}
+    <button class="btn ghost big more-btn" id="ex-toggle" style="margin-top:12px">${t('showWords')}</button>
+    <div id="ex-body" hidden>${examples}</div>
     <button class="btn primary big" style="margin-top:12px" data-close>${t('backToReading')}</button>
   </div>`);
-  ov.querySelectorAll('.snd[data-v]').forEach(btn => btn.addEventListener('click', () => playLetter(b, btn.dataset.v)));
+  ov.querySelectorAll('.snd[data-v]').forEach(btn =>
+    btn.addEventListener('click', () => playLetter(b, btn.dataset.v)));
+  // Examples stay folded away by default so an early learner meets a calm card.
+  const exBody = ov.querySelector('#ex-body'), exBtn = ov.querySelector('#ex-toggle');
+  exBtn.addEventListener('click', () => {
+    exBody.hidden = !exBody.hidden;
+    exBtn.textContent = exBody.hidden ? t('showWords') : t('hideWords');
+    if (!exBody.hidden) exBody.querySelectorAll('.ex-w[data-say]').forEach(btn =>
+      btn.addEventListener('click', () => tts(btn.dataset.say)));
+  });
   ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
 }
 
@@ -287,9 +562,14 @@ function renderToday(view) {
 function renderWeek(view) {
   const wrap = el('div', 'pad');
   const hw = state.homework, days = weekDates(), tk = todayKey();
-  const startName = t('days')[state.weekStart], endName = t('days')[(state.weekStart + 6) % 7];
+  const startName = t('days')[state.weekStart];
+  const endName = t('days')[state.weekEnd == null ? (state.weekStart + 6) % 7 : state.weekEnd];
   wrap.appendChild(el('div', 'exp-title', `${startName} → ${endName}`));
   if (!hw) { wrap.appendChild(el('div', 'card center', `<p class="muted">${t('noHomework')}</p>`)); view.appendChild(wrap); return; }
+  wrap.appendChild(el('div', 'wk-legend',
+    `<span><i class="dot n">7</i>${t('legendNew')}</span>` +
+    `<span><i class="dot r">7</i>${t('legendRev')}</span>` +
+    `<span><i class="dot n done">7</i>${t('legendDone')}</span>`));
   const grid = el('div', 'wgrid');
   days.forEach((dk_, i) => {
     const rec = state.daily[dk_] || {};
@@ -299,10 +579,12 @@ function renderWeek(view) {
     const doneCount = ts.filter(x => x.done).length;
     const stat = ts.length && doneCount === ts.length ? '✓' : isToday ? `${doneCount}/${ts.length}` : '';
     d.innerHTML = `<div class="dn"><span>${t('daysShort')[new Date(dk_ + 'T12:00').getDay()]}${isToday ? ' · ' + t('today_') : ''}</span><span>${stat}</span></div>`;
+    // Every dot names its actual page. Colour says WHAT it is (new vs revision),
+    // shade says WHETHER it is done — pale when still to read, solid once finished.
     const dots = el('div', 'dots');
     for (const x of ts) {
-      const cls = x.done ? 'done' : (isToday ? (x.kind === 'rev' ? 'r' : 'n') : 'off');
-      dots.appendChild(el('span', 'dot ' + cls, x.kind === 'rev' ? 'R' : String(x.page)));
+      const kind = x.kind === 'rev' ? 'r' : 'n';
+      dots.appendChild(el('span', `dot ${kind}${x.done ? ' done' : ''}`, String(x.page)));
     }
     d.appendChild(dots);
     grid.appendChild(d);
@@ -320,10 +602,11 @@ function renderWeek(view) {
   if (pool.length)
     wrap.appendChild(el('div', 'card', `<b style="font-size:13.5px">🎒 ${t('backpackCard')}</b>
       <div class="bp-chips">${pool.map(p => {
-        const di = [0, 1, 2, 3, 4, 5].find(i => revAssignedTo(i).includes(p));
-        const dayN = di != null ? t('daysShort')[new Date(days[di] + 'T12:00').getDay()] : '';
-        return `<span class="bp-chip${revDoneThisWeek(p) ? ' done' : ''}">p.${p} · ${dayN}</span>`; }).join('')}</div>
-      <div class="muted" style="margin-top:6px">${t('autoDist')}</div>`));
+        const on = [0, 1, 2, 3, 4, 5, 6].filter(i => revAssignedTo(i).includes(p))
+          .map(i => t('daysShort')[new Date(days[i] + 'T12:00').getDay()]);
+        return `<span class="bp-chip${revDoneThisWeek(p) ? ' done' : ''}">p.${p} · ${on.join(', ')}</span>`;
+      }).join('')}</div>
+      <div class="muted" style="margin-top:6px">${t('cycleNote')(state.homework?.revPerDay || 1)}</div>`));
   view.appendChild(wrap);
 }
 
@@ -332,19 +615,58 @@ function renderAtlas(view) {
   const wrap = el('div', 'pad');
   const discovered = Object.keys(state.completions).length;
   wrap.appendChild(el('div', 'atlas-head', t('pagesDiscovered')(discovered, 108)));
+  wrap.appendChild(el('div', 'muted center', t('atlasHint')));
   for (const ch of CHAPTERS) {
+    const pages = Object.keys(BOOK.pages).map(Number).filter(p => p >= ch.from && p <= ch.to);
     const total = ch.to - ch.from + 1;
     const done = Object.keys(state.completions).map(Number).filter(p => p >= ch.from && p <= ch.to).length;
     const pc = Math.round(done / total * 100);
-    const locked = done === 0 && !(state.homework?.newPages || []).some(p => p >= ch.from && p <= ch.to);
-    const stateTxt = !ch.inV1 ? t('comingSoon') : pc === 100 ? t('complete') : pc > 0 ? t('exploring') : t('locked');
-    const isl = el('div', 'island' + (locked || !ch.inV1 ? ' locked' : ''));
-    isl.innerHTML = `<span class="ie">${ch.icon}</span>
-      <div class="in"><b>${t('chapters')[ch.id]}</b><span>${ch.from}–${ch.to} · ${stateTxt}</span></div>
-      <div class="bar"><div class="track"><div class="fill" style="width:${pc}%"></div></div><div class="pc">${pc}%</div></div>`;
+    const ready = pages.length > 0;                       // we have the content for these pages
+    const stateTxt = !ready ? t('comingSoon')
+      : pc === 100 ? t('complete') : pc > 0 ? t('exploring') : t('tapToOpen')(pages.length);
+    const items = stickersOf(ch.id);
+    const found = items.filter(e => state.stickers.includes(e));
+    const isl = el(ready ? 'button' : 'div', 'island' + (ready ? '' : ' locked'));
+    isl.innerHTML = `<div class="isl-main">
+        <span class="ie">${ch.icon}</span>
+        <div class="in"><b>${t('chapters')[ch.id]}</b><span>${ch.from}–${ch.to} · ${stateTxt}</span></div>
+        <div class="bar"><div class="track"><div class="fill" style="width:${pc}%"></div></div><div class="pc">${pc}%</div></div>
+      </div>
+      <div class="isl-souv" title="${t('souvenirs')}">
+        ${items.map(e => state.stickers.includes(e)
+          ? `<span class="sv">${e}</span>` : `<span class="sv off">·</span>`).join('')}
+        <span class="sv-count">${found.length}/${items.length}</span>
+      </div>`;
+    if (ready) isl.addEventListener('click', () => pagePicker(ch, pages));
     wrap.appendChild(isl);
   }
+  const total = ALL_STICKERS.length;
+  wrap.appendChild(el('div', 'muted center', t('souvTotal')(state.stickers.length, total)));
   view.appendChild(wrap);
+}
+
+// Pick any page in a chapter and read it straight away — no homework needed.
+function pagePicker(ch, pages) {
+  const rows = pages.map(p => {
+    const pg = BOOK.pages[p];
+    const n = pageItems(p).length;
+    const times = state.completions[p] || 0;
+    const kind = pg.type === 'letters' ? t('lettersPage') : t('wordsPage');
+    return `<button class="pick" data-p="${p}">
+      <b>${t('pageWord')} ${p}</b>
+      <span>${kind} · ${n} ${t('itemsWord')}${times ? ` · ✓×${times}` : ''}</span>
+    </button>`;
+  }).join('');
+  const ov = overlay(`<h4>${ch.icon} ${t('chapters')[ch.id]}</h4>
+    <div class="muted">${t('pickPage')}</div>
+    <div class="picklist">${rows}</div>
+    <button class="btn ghost big" data-close>${t('backToReading')}</button>`);
+  ov.querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+    const p = parseInt(b.dataset.p, 10);
+    ov.remove();
+    go('practice', { page: p, taskId: null, kind: 'free' });
+  }));
+  ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
 }
 
 // ---------------- LETTER CARDS ----------------
@@ -352,14 +674,26 @@ function renderCards(view) {
   const wrap = el('div', 'pad');
   wrap.appendChild(el('div', 'atlas-head', t('collected')(state.cards.length, ALPHABET.length)));
   const grid = el('div', 'cards-grid');
+  // Every card opens — it is a reference the child may need at any point. The badge
+  // still shows which ones have been *earned*, so the collection remains a goal.
   for (const L of ALPHABET) {
     const got = state.cards.includes(L);
-    const c = el('button', 'ccard arabic' + (got ? '' : ' lockd'),
-      `<span class="g">${L}</span><span class="st">${got ? '🃏' : '🔒'}</span>`);
-    if (got) c.addEventListener('click', () => showLetterCard(L));
+    const c = el('button', 'ccard arabic' + (got ? '' : ' notyet'),
+      `<span class="g">${L}</span><span class="st">${got ? '🃏' : '👀'}</span>`);
+    c.addEventListener('click', () => showLetterCard(L));
     grid.appendChild(c);
   }
   wrap.appendChild(grid);
+  // Extra shapes the book teaches beyond the 28 letters (hamza seats, ة, ى, لا)
+  wrap.appendChild(el('h3', 'sec', t('specialShapes')));
+  wrap.appendChild(el('div', 'muted', t('specialHint')));
+  const sgrid = el('div', 'cards-grid');
+  for (const L of SPECIALS) {
+    const c = el('button', 'ccard arabic special', `<span class="g">${L}</span><span class="st">✦</span>`);
+    c.addEventListener('click', () => showLetterCard(L));
+    sgrid.appendChild(c);
+  }
+  wrap.appendChild(sgrid);
   const vs = vowelsUnlocked();
   const labOpen = vs.length === 3;
   const lab = el('div', 'vowel-lab' + (labOpen ? ' unlocked' : ''));
@@ -388,6 +722,7 @@ function renderCards(view) {
       <span class="muted">${t('vowelLabSub')}</span>`;
     wrap.appendChild(lab);
   }
+
   view.appendChild(wrap);
 }
 
@@ -458,10 +793,15 @@ function renderPractice(view, { page, taskId, kind }) {
   const speaker = el('button', 'speaker', '🔊'); speaker.setAttribute('aria-label', 'play');
   const plabel = el('div', 'parent-lbl', t('parentCheck'));
   const row = el('div', 'parent-row');
+  const backBtn = el('button', 'btn back', t('backWord'));
   const againBtn = el('button', 'btn again', t('tryAgain'));
   const okBtn = el('button', 'btn ok', t('gotIt'));
-  row.append(againBtn, okBtn);
+  row.append(backBtn, againBtn, okBtn);
   cont.append(sprintRow, hint, stage, lookup, speaker, plabel, row);
+  // Stars are only ever awarded once per word, so stepping back and forth can never
+  // double-count — and going back never takes a star away from the child.
+  const awarded = new Set();
+  let busy = false;
 
   function sprintNo() { return Math.floor(idx / SPRINT); }
   function drawSprint() {
@@ -470,28 +810,54 @@ function renderPractice(view, { page, taskId, kind }) {
     const count = Math.min(SPRINT, items.length - startI);
     for (let i = 0; i < count; i++) {
       const s = el('span', 's-star', '⭐');
-      if (startI + i < idx) s.classList.add('lit');
+      if (awarded.has(startI + i)) s.classList.add('lit');
       sprintRow.appendChild(s);
     }
     sprintRow.appendChild(el('span', 'chest-ico', '🧰'));
     hint.textContent = (isLetters ? t('lettersSprint') : t('sprintOf'))(sprintNo() + 1, sprints);
   }
+  // Arabic fallback fonts vary wildly in how much of the em box the glyphs actually
+  // fill (a 116px font can render ~110px of text), so a fixed pixel size is useless.
+  // Measure the rendered word and scale it to fill the stage instead.
+  function fitWord() {
+    const box = stage.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    const probe = 120;
+    word.style.fontSize = probe + 'px';
+    const r = word.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const scale = Math.min(box.width * 0.88 / r.width, box.height * 0.94 / r.height);
+    word.style.fontSize = Math.max(32, Math.min(190, Math.floor(probe * scale))) + 'px';
+  }
   function drawWord() {
     const text = items[idx];
-    const n = baseLettersOf(text).length || 1;
-    word.style.fontSize = (n <= 1 ? 110 : n === 2 ? 96 : n === 3 ? 84 : n <= 5 ? 66 : n <= 9 ? 52 : 34) + 'px';
-    let html = '', open = false;
+    // The book alternates colour on neighbouring letters so a haraka is never
+    // ambiguous about which letter it belongs to. Each letter carries its own
+    // haraka in a matching darker tone.
+    let html = '', open = false, li = -1;
     for (const ch of text) {
       if (HARAKA_RE.test(ch)) html += `<span class="h">${ch}</span>`;
       else if (ch === 'ـ') html += ch;
-      else { if (open) html += '</span>'; html += `<span class="lt" data-l="${ch}">${ch}`; open = true; }
+      else {
+        if (open) html += '</span>';
+        li++;
+        html += `<span class="lt c${li % 2}" data-l="${ch}">${ch}`;
+        open = true;
+      }
     }
     if (open) html += '</span>';
     word.innerHTML = html;
+    // per-word letterform: the book alternates between the stacked ligature and the
+    // flat baseline form, so honour the recorded shape where we have one
+    const shape = (window.SHAPES || {})[page + ':' + idx];
+    word.classList.toggle('flat-shape', shape === 'flat');
+    word.classList.toggle('stacked-shape', shape === 'stacked');
+    fitWord();
     word.classList.remove('pop'); void word.offsetWidth; word.classList.add('pop');
     word.querySelectorAll('.lt').forEach(sp => sp.addEventListener('click', () => showLetterCard(sp.dataset.l, { log: true })));
     drawSprint();
   }
+  addEventListener('resize', fitWord);
   function play() {
     speaker.classList.add('pulse'); setTimeout(() => speaker.classList.remove('pulse'), 1500);
     const base = baseLettersOf(items[idx]);
@@ -504,32 +870,62 @@ function renderPractice(view, { page, taskId, kind }) {
   againBtn.addEventListener('click', () => {
     const wk = weekKey(); state.retries[wk] = state.retries[wk] || [];
     state.retries[wk].push({ page, word: items[idx] }); save();
+    SFX.again();
     play();
   });
+  backBtn.addEventListener('click', () => {
+    if (busy || idx === 0) return;
+    idx--;
+    drawWord();
+  });
   okBtn.addEventListener('click', () => {
-    const r = okBtn.getBoundingClientRect();
-    starBurst(r.left + r.width / 2, r.top);
-    bumpStars(1);
-    const stars = sprintRow.querySelectorAll('.s-star');
-    const inSprint = idx % SPRINT;
-    if (stars[inSprint]) stars[inSprint].classList.add('lit');
+    // Guard against a small child machine-gunning the button and skipping words
+    // unseen: ignore repeat taps until the star has finished playing.
+    if (busy) return;
+    busy = true;
+    okBtn.classList.add('cooling');
+    setTimeout(() => { busy = false; okBtn.classList.remove('cooling'); }, 900);
+
+    // Big, unmistakable star for THIS reading: it pops over the word, then flies
+    // to the counter so the child sees exactly where their star went.
+    const wr = word.getBoundingClientRect();
+    if (!awarded.has(idx)) {
+      awarded.add(idx);
+      SFX.star();
+      const isRev = kind === 'rev';
+      flyingStar(wr.left + wr.width / 2, wr.top + wr.height / 2, isRev ? '💎' : '⭐');
+      starBurst(wr.left + wr.width / 2, wr.top + wr.height / 2, 5, isRev ? '💎' : '⭐');
+      if (isRev) bumpGems(1); else bumpStars(1);
+      const stars = sprintRow.querySelectorAll('.s-star');
+      const inSprint = idx % SPRINT;
+      if (stars[inSprint]) { stars[inSprint].classList.add('lit', 'just-won'); }
+    }
     idx++;
-    if (idx >= items.length) return finish();
+    if (idx >= items.length) return setTimeout(finish, 700);   // let the star land first
     if (idx % SPRINT === 0) {
-      bumpStars(6);
+      if (kind === 'rev') bumpGems(6); else bumpStars(6);
+      SFX.chest();
+      state.chestCount = (state.chestCount || 0) + 1; save();
+      // surprise sticker every 3rd chest — unpredictable enough to stay exciting
+      const surprise = state.chestCount % 3 === 0;
       const ov = overlay(`<div class="big-emoji">🎉🧰✨</div><h4>${t('chestOpened')}</h4>
         <p class="muted">${t('plusStars')(6)}</p>
         <button class="btn primary big" data-next>${t('nextSprint')}</button>`);
-      ov.querySelector('[data-next]').addEventListener('click', () => { ov.remove(); drawWord(); });
+      ov.querySelector('[data-next]').addEventListener('click', () => {
+        ov.remove();
+        if (surprise) awardSticker(page);
+        drawWord();
+      });
       return;
     }
-    setTimeout(drawWord, 220);
+    setTimeout(drawWord, 650);          // pause so the star is seen before the next word
   });
 
   function finish() {
-    bumpStars(6);                                        // final sprint chest
+    const isRev = kind === 'rev';
     const bonus = kind === 'learn' ? 12 : 6;
-    bumpStars(bonus);
+    if (isRev) { bumpGems(6); bumpGems(bonus); }         // revision pays in gems throughout
+    else { bumpStars(6); bumpStars(bonus); }
     state.completions[page] = (state.completions[page] || 0) + 1;
     if (kind === 'learn') state.firstDone[page] = true;
     for (const L of newCardLetters(page)) state.cards.push(L);
@@ -544,11 +940,31 @@ function renderPractice(view, { page, taskId, kind }) {
       state.streak.count = (last === dkey(y)) ? state.streak.count + 1 : 1;
       state.streak.last = tk;
     }
-    save(); confetti();
-    const ov = overlay(`<div class="big-emoji">🎉⭐🎉</div><h4>${t('pageDone')(page)}</h4>
+    save(); confetti(); SFX.mission();
+    setTimeout(checkCertificates, 1400);      // after the chest, so rewards don't collide
+    // Mission complete = the treasure chest opens. It shakes, bursts, then shows the haul.
+    const ov = overlay(`<div class="chest-stage">
+        <div class="chest-big" id="chest-big">🧰</div>
+        <div class="chest-rays"></div>
+      </div>
+      <h4>${t('pageDone')(page)}</h4>
       <p class="muted">${t('plusStars')(bonus + 6)}</p>${chestMsg}
-      <button class="btn primary big" data-home>OK!</button>`);
-    ov.querySelector('[data-home]').addEventListener('click', () => { ov.remove(); go('today'); });
+      <button class="btn primary big" data-home>${t('great')}</button>`);
+    const chest = ov.querySelector('#chest-big');
+    chest.classList.add('shaking');
+    setTimeout(() => {
+      chest.textContent = '🎉';
+      chest.classList.remove('shaking');
+      chest.classList.add('opened');
+      ov.querySelector('.chest-rays').classList.add('on');
+      const r = chest.getBoundingClientRect();
+      starBurst(r.left + r.width / 2, r.top + r.height / 2, 12);
+    }, 900);
+    ov.querySelector('[data-home]').addEventListener('click', () => {
+      ov.remove();
+      awardSticker(page);              // finishing a page always earns one, from its region
+      go('today');
+    });
   }
   drawWord();
 }
@@ -557,16 +973,26 @@ function renderPractice(view, { page, taskId, kind }) {
 let parentUnlocked = false;
 function renderParentGate(view) {
   if (parentUnlocked) return renderParent(view);
-  const a = 3 + Math.floor(Math.random() * 6), b = 4 + Math.floor(Math.random() * 5);
+  // Two-digit multiplication: trivial for an adult, out of reach for an early reader,
+  // and far too large a range to guess (single-digit addition was guessable).
+  const a = 12 + Math.floor(Math.random() * 8);        // 12-19
+  const b = 6 + Math.floor(Math.random() * 8);         // 6-13
+  const answer = a * b;
   const wrap = el('div', 'pad center');
-  wrap.appendChild(el('div', 'card', `<div class="gate-q">🔒 ${t('gateQ')} ${a} + ${b}?</div>
-    <input class="gate-in" id="gate-in" type="number" inputmode="numeric">
-    <div style="margin-top:12px"><button class="btn primary" id="gate-go">${t('enter')}</button></div>`));
+  wrap.appendChild(el('div', 'card', `<div class="gate-q">🔒 ${t('gateQ')} ${a} × ${b}?</div>
+    <input class="gate-in" id="gate-in" type="number" inputmode="numeric" autocomplete="off">
+    <div style="margin-top:12px"><button class="btn primary" id="gate-go">${t('enter')}</button></div>
+    <div class="muted" style="margin-top:8px">${t('gateHint')}</div>`));
   view.appendChild(wrap);
-  $('#gate-go').addEventListener('click', () => {
-    if (parseInt($('#gate-in').value, 10) === a + b) { parentUnlocked = true; go('parent'); }
-    else toast(t('wrongAnswer'));
-  });
+  let tries = 0;
+  const attempt = () => {
+    if (parseInt($('#gate-in').value, 10) === answer) { parentUnlocked = true; go('parent'); return; }
+    tries++;
+    $('#gate-in').value = '';
+    toast(tries >= 3 ? t('wrongAnswerAgain') : t('wrongAnswer'));
+  };
+  $('#gate-go').addEventListener('click', attempt);
+  $('#gate-in').addEventListener('keydown', e => { if (e.key === 'Enter') attempt(); });
 }
 function renderParent(view) {
   const wrap = el('div', 'pad');
@@ -579,11 +1005,22 @@ function renderParent(view) {
 
   // schedule
   const sched = el('div', 'card setup');
+  const curEnd = state.weekEnd == null ? (state.weekStart + 6) % 7 : state.weekEnd;
   sched.innerHTML = `<b>${t('weekSchedule')} · <span style="color:var(--teal)">${t('weekProgress')(pc)}</span></b>
     <div class="sel-row"><span>${t('weekStartsOn')}</span><select id="ws-sel">${
       t('days').map((d, i) => `<option value="${i}" ${i === state.weekStart ? 'selected' : ''}>${d}</option>`).join('')
-    }</select><span id="ws-end">${t('endsNote')(t('days')[(state.weekStart + 6) % 7])}</span></div>`;
+    }</select>
+    <span>${t('weekEndsOn')}</span><select id="we-sel">${
+      t('days').map((d, i) => `<option value="${i}" ${i === curEnd ? 'selected' : ''}>${d}</option>`).join('')
+    }</select>
+    <span id="ws-len" class="muted">${t('weekDaysLong')(weekLength())}</span></div>`;
   wrap.appendChild(sched);
+  const syncLen = () => {
+    const s = +sched.querySelector('#ws-sel').value, e = +sched.querySelector('#we-sel').value;
+    sched.querySelector('#ws-len').textContent = t('weekDaysLong')(((e - s + 7) % 7) + 1);
+  };
+  sched.querySelector('#ws-sel').addEventListener('change', syncLen);
+  sched.querySelector('#we-sel').addEventListener('change', syncLen);
 
   // new pages
   const avail = Object.keys(BOOK.pages).map(Number).sort((x, y) => x - y);
@@ -605,19 +1042,29 @@ function renderParent(view) {
   const rev = el('div', 'card setup');
   const opts = who => `<option value="">${t('none')}</option>` +
     avail.map(p => `<option value="${p}" ${hw[who] === p ? 'selected' : ''}>${p}</option>`).join('');
+  const per = hw.revPerDay || 1;
   rev.innerHTML = `<b>${t('revSetup')}</b>
     <div class="sel-row"><span>${t('from')}</span><select id="rev-from">${opts('revFrom')}</select>
-    <span>${t('to')}</span><select id="rev-to">${opts('revTo')}</select></div>`;
+    <span>${t('to')}</span><select id="rev-to">${opts('revTo')}</select></div>
+    <div class="sel-row" style="margin-top:8px"><span>${t('perDay')}</span>
+      <select id="rev-per">${[1,2,3,4,5].map(n =>
+        `<option value="${n}" ${n === per ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <span id="per-hint" class="muted">${t('perDayHint')(per)}</span></div>`;
   wrap.appendChild(rev);
+  rev.querySelector('#rev-per').addEventListener('change', e => {
+    rev.querySelector('#per-hint').textContent = t('perDayHint')(+e.target.value);
+  });
 
   const saveBtn = el('button', 'btn primary big', t('save'));
   saveBtn.addEventListener('click', () => {
     state.weekStart = parseInt($('#ws-sel').value, 10);
+    state.weekEnd = parseInt($('#we-sel').value, 10);
     const rf = $('#rev-from').value, rt = $('#rev-to').value;
     state.homework = {
       newPages: [...sel].sort((x, y) => x - y),
       revFrom: rf ? parseInt(rf, 10) : null,
       revTo: rt ? parseInt(rt, 10) : null,
+      revPerDay: parseInt($('#rev-per').value, 10) || 1,
     };
     save(); toast(t('saved')); go('parent');
   });
@@ -664,7 +1111,17 @@ function renderParent(view) {
 // ---------------- boot ----------------
 function boot() {
   applyDir();
+  // Bundled @font-face families are not measurable until the browser has actually
+  // fetched them, so ask for them up front, then let style detection re-run.
+  if (document.fonts && document.fonts.load) {
+    Promise.all(['Amiri', 'Reem Kufi', 'Aref Ruqaa', 'Noto Naskh Arabic']
+      .map(f => document.fonts.load(`64px "${f}"`).catch(() => {})))
+      .then(() => { _styleCache = null; })
+      .catch(() => {});
+  }
   $('#stars-pill').textContent = '⭐ ' + state.stars;
+  const gp = $('#gems-pill');
+  if (gp) { gp.textContent = '💎 ' + (state.gems || 0); gp.hidden = !(state.gems > 0); }
   $('#lang-btn').textContent = state.lang === 'ar' ? 'EN' : 'ع';
   $('#lang-btn').addEventListener('click', () => {
     state.lang = state.lang === 'ar' ? 'en' : 'ar'; save(); applyDir();
@@ -673,8 +1130,17 @@ function boot() {
   });
   drawNav();
   go('today');
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http'))
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Offline caching is OFF while the app is still changing: a service worker kept
+  // serving stale files, so fixes were invisible until caches were cleared by hand.
+  // This actively removes any worker already installed on the device.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then(rs => Promise.all(rs.map(r => r.unregister())))
+      .then(ok => { if (ok && ok.length) return caches.keys()
+        .then(ks => Promise.all(ks.map(k => caches.delete(k))))
+        .then(() => location.reload()); })
+      .catch(() => {});
+  }
 }
 function drawNav() {
   const nav = $('#nav'); nav.innerHTML = '';

@@ -10,10 +10,19 @@
 html,body{height:100%}
 body{margin:0;background:#E8EEEC;font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
   color:var(--ink);line-height:1.5;overscroll-behavior:none}
-.arabic{font-family:"Noto Naskh Arabic","Traditional Arabic","Amiri","Scheherazade New",serif}
+/* Amiri first, deliberately. It is a classical Naskh (after the Bulaq/Amiria press)
+   and keeps the ligatures the book uses — ح tucking UNDER س in سُحِر, the س-م join in
+   رُسِم, the looped medial ه in بُهِت. Noto Naskh is a modern simplified Naskh that
+   flattens all of those onto the baseline, which is why the words looked wrong.
+   Measured: Amiri sets سحر 40% narrower than Noto — that compression is the stacking. */
+.arabic{font-family:"Amiri","Scheherazade New","Noto Naskh Arabic","Traditional Arabic",serif;
+  font-variant-ligatures:common-ligatures contextual discretionary-ligatures;
+  font-feature-settings:"calt" 1,"liga" 1,"dlig" 1,"rlig" 1,"mark" 1,"mkmk" 1}
 
-#shell{max-width:440px;margin:0 auto;min-height:100dvh;background:var(--bg);
-  display:flex;flex-direction:column;position:relative;box-shadow:0 0 40px rgba(10,30,26,.15)}
+/* Fixed to the viewport so the bottom nav can never be pushed off screen. */
+#shell{max-width:440px;margin:0 auto;height:100dvh;background:var(--bg);
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+  box-shadow:0 0 40px rgba(10,30,26,.15)}
 
 /* top bar */
 #topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -21,7 +30,9 @@ body{margin:0;background:#E8EEEC;font-family:"Segoe UI",system-ui,-apple-system,
 #screen-title{font-weight:800;color:var(--teal);font-size:17px}
 #stars-pill{background:#FFF3D6;border:2px solid var(--amber);border-radius:999px;
   padding:4px 12px;font-weight:800;font-size:15px;color:var(--amber-dark);white-space:nowrap}
-#stars-pill.bump{animation:bump .4s ease}
+#gems-pill{background:#E9E4FB;border:2px solid #8B6FD4;border-radius:999px;
+  padding:4px 12px;font-weight:800;font-size:15px;color:#4A2E96;white-space:nowrap}
+#stars-pill.bump,#gems-pill.bump{animation:bump .4s ease}
 @keyframes bump{50%{transform:scale(1.25)}}
 #lang-btn{border:2px solid #D8ECE7;background:#fff;border-radius:999px;font-weight:800;
   font-size:13px;padding:4px 12px;cursor:pointer;color:var(--teal);font-family:inherit}
@@ -35,7 +46,7 @@ body{margin:0;background:#E8EEEC;font-family:"Segoe UI",system-ui,-apple-system,
 .nav-btn.on .ico{background:var(--teal);color:#fff}
 .nav-btn.on{color:var(--teal)}
 
-#view{flex:1;display:flex;flex-direction:column;overflow-y:auto}
+#view{flex:1;display:flex;flex-direction:column;overflow-y:auto;min-height:0}
 .pad{padding:6px 18px 18px}
 
 /* generic */
@@ -76,11 +87,17 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 .wday{background:#fff;border-radius:14px;padding:9px 11px;box-shadow:0 3px 10px rgba(20,60,90,.08);border:2px solid transparent}
 .wday .dn{font-size:12px;font-weight:800;color:var(--ink-faint);display:flex;justify-content:space-between}
 .wday .dots{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
-.dot{min-width:22px;height:22px;padding:0 3px;border-radius:7px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff}
-.dot.n{background:#4B8FD9}
-.dot.r{background:#F0A62A}
-.dot.done{background:var(--green)}
-.dot.off{background:#E2E8E6;color:#98A4A0}
+.dot{min-width:26px;height:24px;padding:0 5px;border-radius:8px;display:grid;place-items:center;
+  font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;border:1.5px solid transparent}
+/* colour = type (blue new / amber revision), shade = done or not */
+.dot.n{background:#E1F0FF;color:#1D5FA8;border-color:#B7D6F5}
+.dot.n.done{background:#1D5FA8;color:#fff;border-color:#1D5FA8}
+.dot.r{background:#FFF0D6;color:#8A5A00;border-color:#F3D79B}
+.dot.r.done{background:#C97F0A;color:#fff;border-color:#C97F0A}
+.wk-legend{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:11px;
+  font-weight:700;color:var(--ink-faint);margin:8px 0 2px}
+.wk-legend i{font-style:normal;display:inline-grid;place-items:center;min-width:24px;height:20px;
+  border-radius:7px;font-size:10px;font-weight:800;margin-inline-end:4px;vertical-align:-4px;border:1.5px solid transparent}
 .wday.today-d{border-color:var(--coral)}
 .wday.today-d .dn span:first-child{color:var(--coral)}
 .gate{background:linear-gradient(135deg,#FFE9B0,#FFD879);border-radius:16px;padding:12px 14px;
@@ -94,8 +111,15 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 
 /* ATLAS */
 .atlas-head{text-align:center;font-size:13px;font-weight:800;color:var(--ink-soft);margin-bottom:10px}
-.island{display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:11px 13px;
+.island{display:flex;flex-direction:column;gap:7px;background:#fff;border-radius:16px;padding:11px 13px;
   margin-bottom:8px;box-shadow:0 3px 10px rgba(20,60,90,.08)}
+.isl-main{display:flex;align-items:center;gap:12px;width:100%}
+/* souvenirs collected in THIS region, shown on the region itself */
+.isl-souv{display:flex;align-items:center;gap:3px;flex-wrap:wrap;
+  border-top:1px dashed var(--line);padding-top:6px;width:100%}
+.isl-souv .sv{font-size:17px;line-height:1.2}
+.isl-souv .sv.off{opacity:.3;font-size:15px;color:var(--ink-faint)}
+.isl-souv .sv-count{margin-inline-start:auto;font-size:10.5px;font-weight:800;color:var(--ink-faint)}
 .island .ie{font-size:28px}
 .island .in{min-width:0}
 .island .in b{font-size:14px;display:block}
@@ -105,6 +129,15 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 .bar .fill{height:100%;border-radius:4px;background:var(--teal)}
 .bar .pc{font-size:10px;font-weight:800;color:var(--teal);text-align:end;margin-top:2px}
 .island.locked{opacity:.5;filter:grayscale(.7)}
+button.island{width:100%;text-align:inherit;font-family:inherit;border:2px solid transparent;cursor:pointer}
+button.island:hover,button.island:focus-visible{border-color:var(--teal)}
+.picklist{display:grid;gap:7px;margin:12px 0;max-height:46dvh;overflow-y:auto}
+.pick{display:flex;flex-direction:column;align-items:flex-start;gap:1px;background:#F4FAF8;
+  border:2px solid #D8ECE7;border-radius:12px;padding:9px 13px;cursor:pointer;font-family:inherit;
+  text-align:start;width:100%}
+.pick:hover,.pick:focus-visible{border-color:var(--amber);background:#FFF9E8}
+.pick b{font-size:15px;color:var(--ink)}
+.pick span{font-size:11.5px;color:var(--ink-faint);font-weight:700}
 
 /* LEARN */
 .video-wrap{border-radius:16px;overflow:hidden;background:#183A4A;margin-bottom:6px;aspect-ratio:16/9}
@@ -122,18 +155,29 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 .sm-note{font-size:12px;font-weight:700;color:var(--ink-soft);text-align:center;margin-top:8px}
 
 /* PRACTICE */
-#prac{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 20px 16px}
+#prac{flex:1;display:flex;flex-direction:column;align-items:center;padding:6px 14px 12px;min-height:0}
 .sprint{display:flex;gap:7px;align-items:center;margin:6px 0 2px}
 .s-star{width:26px;height:26px;font-size:18px;display:grid;place-items:center;
   filter:grayscale(1) opacity(.35);transition:filter .3s,transform .3s}
 .s-star.lit{filter:none;transform:scale(1.15)}
 .chest-ico{font-size:24px;margin-inline-start:2px}
 .prac-hint{font-size:12.5px;color:var(--ink-faint);font-weight:700}
-.word-stage{flex:1;display:grid;place-items:center;width:100%;min-height:180px}
-.big-word{line-height:1.7;color:var(--book-blue);text-align:center;direction:rtl}
+.word-stage{flex:1;display:grid;place-items:center;width:100%;min-height:0;overflow:hidden}
+/* tight line-height: leading was eating the space the glyphs could have used */
+.big-word{line-height:1.22;color:var(--book-blue);text-align:center;direction:rtl;
+  white-space:nowrap;padding:.06em 0}
+/* per-word letterform overrides — rlig is what controls Naskh's stacking
+   (verified: سُحِرَ sets 83px with rlig on vs 122px off) */
+.big-word.flat-shape{font-feature-settings:"calt" 1,"liga" 1,"rlig" 0,"mark" 1,"mkmk" 1}
+.big-word.stacked-shape{font-feature-settings:"calt" 1,"liga" 1,"rlig" 1,"dlig" 1,"mark" 1,"mkmk" 1}
 .big-word .lt{cursor:pointer;border-radius:8px}
 .big-word .lt:active{background:#FFF3D6}
-.big-word .h{color:var(--book-red)}
+/* alternating colours: a haraka always sits on a letter of its own colour, so it is
+   never ambiguous which letter it belongs to (the printed book does the same) */
+.big-word .lt.c0{color:var(--book-blue)}
+.big-word .lt.c1{color:#0F6B63}
+.big-word .lt.c0 .h{color:var(--book-red)}
+.big-word .lt.c1 .h{color:#C1571B}
 .big-word.pop{animation:pop .45s ease}
 @keyframes pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1)}}
 .lookup-hint{font-size:11px;font-weight:700;color:#B3BCB8;margin-bottom:6px}
@@ -141,11 +185,53 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
   font-size:27px;cursor:pointer;box-shadow:0 6px 16px rgba(18,149,138,.35)}
 .speaker.pulse{animation:pulse 1s ease infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(18,149,138,.45)}100%{box-shadow:0 0 0 22px rgba(18,149,138,0)}}
-.parent-row{display:flex;gap:12px;width:100%;padding:12px 4px 4px}
+.parent-row{display:flex;gap:9px;width:100%;padding:12px 4px 4px;align-items:stretch}
 .parent-row .btn{flex:1}
-.btn.ok{background:var(--green);color:#fff}
+.btn.ok{background:var(--green);color:#fff;flex:1.5}
 .btn.again{background:var(--chip-amber-bg);color:var(--amber-dark)}
+.btn.back{background:#EDF1F0;color:var(--ink-soft);flex:.7;font-size:14px}
+.btn.ok.cooling{opacity:.45;transform:scale(.97)}   /* ignoring rapid repeat taps */
+.btn.ok{transition:opacity .15s,transform .15s}
 .parent-lbl{font-size:10px;color:#B3BCB8;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:center;margin-top:8px}
+/* one big star per correct reading -> flies into the counter */
+.fly-star{position:fixed;pointer-events:none;z-index:60;font-size:60px;
+  transform:translate(-50%,-50%);animation:flystar 1.05s cubic-bezier(.3,.9,.4,1) forwards}
+@keyframes flystar{
+  0%{transform:translate(-50%,-50%) scale(.2) rotate(-20deg);opacity:0}
+  22%{transform:translate(-50%,-50%) scale(1.35) rotate(8deg);opacity:1}
+  42%{transform:translate(-50%,-50%) scale(1.1) rotate(0);opacity:1}
+  100%{transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(.28);opacity:.15}
+}
+.plus-one{position:fixed;pointer-events:none;z-index:60;font-weight:800;font-size:26px;
+  color:var(--amber-dark);text-shadow:0 2px 0 #fff;transform:translate(-50%,-50%);
+  animation:plusup .9s ease forwards}
+@keyframes plusup{
+  0%{transform:translate(-50%,-50%) scale(.5);opacity:0}
+  30%{transform:translate(-50%,-140%) scale(1.15);opacity:1}
+  100%{transform:translate(-50%,-260%) scale(1);opacity:0}
+}
+.s-star.just-won{animation:wonpop .55s ease}
+@keyframes wonpop{0%{transform:scale(1)}45%{transform:scale(1.9)}100%{transform:scale(1.15)}}
+
+/* mission complete -> the treasure chest opens */
+.chest-stage{position:relative;display:grid;place-items:center;height:120px}
+.chest-big{font-size:74px;line-height:1;position:relative;z-index:2}
+.chest-big.shaking{animation:chestshake .9s ease}
+@keyframes chestshake{
+  0%,100%{transform:rotate(0) scale(1)}
+  15%{transform:rotate(-9deg) scale(1.05)}
+  30%{transform:rotate(9deg) scale(1.05)}
+  45%{transform:rotate(-11deg) scale(1.1)}
+  60%{transform:rotate(11deg) scale(1.1)}
+  80%{transform:rotate(-6deg) scale(1.18)}
+}
+.chest-big.opened{animation:chestopen .6s cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes chestopen{0%{transform:scale(.6)}60%{transform:scale(1.45)}100%{transform:scale(1.2)}}
+.chest-rays{position:absolute;inset:0;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,rgba(255,200,60,.55) 0%,rgba(255,200,60,0) 68%)}
+.chest-rays.on{animation:rays .9s ease forwards}
+@keyframes rays{0%{opacity:0;transform:scale(.3)}55%{opacity:1;transform:scale(1.35)}100%{opacity:.5;transform:scale(1.15)}}
+
 .burst{position:fixed;pointer-events:none;font-size:28px;z-index:50;animation:fly 1s ease forwards}
 @keyframes fly{0%{transform:translate(0,0) scale(.6);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(1.25);opacity:0}}
 
@@ -157,11 +243,11 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 .sheet .big-emoji{font-size:54px;line-height:1.2}
 .lcard .frm{display:flex;gap:6px;direction:rtl;margin-top:10px}
 .lcard .fc{flex:1;background:#F4FAF8;border:2px solid #D8ECE7;border-radius:12px;padding:7px 2px}
-.lcard .fc .g{font-size:27px;color:var(--book-blue);line-height:1.4;display:block}
-.lcard .fc .l{font-size:9px;color:var(--ink-faint);font-weight:700}
+.lcard .fc .g{font-size:40px;color:var(--book-blue);line-height:1.4;display:block}
+.lcard .fc .l{font-size:9.5px;color:var(--ink-faint);font-weight:700}
 .lcard .snd-row{display:flex;gap:6px;margin-top:10px;direction:rtl}
-.lcard .snd{flex:1;background:#FFF9E8;border:2px solid #FFE2A0;border-radius:10px;font-size:22px;
-  padding:4px 0;color:var(--book-blue);cursor:pointer;font-family:inherit}
+.lcard .snd{flex:1;background:#FFF9E8;border:2px solid #FFE2A0;border-radius:10px;font-size:34px;
+  padding:8px 0;color:var(--book-blue);cursor:pointer;font-family:inherit}
 .lcard .snd .h{color:var(--book-red)}
 .lcard .snd.off{background:#F4F4F2;border-color:#E2E2DE;color:#C4CCC9;cursor:default}
 
@@ -169,9 +255,88 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 .cards-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;direction:rtl}
 .ccard{background:#fff;border:2px solid #D8ECE7;border-radius:14px;text-align:center;padding:7px 2px;
   cursor:pointer;font-family:inherit}
-.ccard .g{font-size:27px;color:var(--book-blue);line-height:1.4;display:block}
+.ccard .g{font-size:38px;color:var(--book-blue);line-height:1.35;display:block}
 .ccard .st{font-size:10px;font-weight:800;color:var(--teal)}
 .ccard.lockd{opacity:.4;filter:grayscale(1);cursor:default}
+.ccard.special{border-color:#E0D2F0;background:#FBF7FF}
+.ccard.special .st{color:#7B5EA7}
+.ccard.notyet{opacity:.62;border-style:dashed}
+.ccard.notyet:hover,.ccard.notyet:focus-visible{opacity:1;border-color:var(--amber)}
+/* two-level letter card */
+.lvl-tabs{display:flex;gap:6px;margin:8px 0 10px}
+.lvl{flex:1;border:2px solid var(--line);background:var(--card);border-radius:10px;
+  padding:7px 4px;font-size:12px;font-weight:800;color:var(--ink-soft);cursor:pointer;font-family:inherit}
+.lvl.on{background:var(--teal);border-color:var(--teal);color:#fff}
+
+/* the letter inside real words from the book, grouped by position */
+.ex-group{margin-top:7px}
+.ex-pos{font-size:10px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:3px}
+.ex-words{display:flex;gap:6px;flex-wrap:wrap;direction:rtl}
+/* the same word twice: classical Naskh beside simplified, to show they are one letter */
+.ex-pair{display:flex;align-items:center;gap:8px;direction:rtl;margin-bottom:6px}
+.ex-pair .ex-w{flex:1;min-width:0}
+.ex-eq{font-size:16px;font-weight:800;color:var(--ink-faint);flex-shrink:0}
+.ex-w small{display:block;font-family:"Segoe UI",system-ui,sans-serif;font-size:9px;
+  font-weight:800;color:var(--ink-faint);letter-spacing:.04em;text-transform:uppercase;
+  margin-top:-2px;direction:ltr}
+.st-classical{font-family:"Amiri",serif !important;
+  font-feature-settings:"calt" 1,"liga" 1,"dlig" 1,"rlig" 1,"mark" 1,"mkmk" 1 !important}
+.st-simple{font-family:"Noto Naskh Arabic","Scheherazade New",serif !important;
+  font-feature-settings:"calt" 1,"liga" 1,"rlig" 0,"mark" 1,"mkmk" 1 !important}
+.more-btn{font-size:14px}
+/* Must be the SAME Naskh as the reading screen and the shapes row above — an earlier
+   `font-family:inherit` here quietly dropped these back to the UI font, so the example
+   words rendered in a different style from the letter they were illustrating. */
+.ex-w{font-size:34px;line-height:1.5;color:var(--book-blue);direction:rtl;
+  background:#F4FAF8;border:2px solid #D8ECE7;border-radius:12px;padding:2px 12px;
+  cursor:pointer;
+  font-family:"Amiri","Scheherazade New","Noto Naskh Arabic","Traditional Arabic",serif;
+  font-variant-ligatures:common-ligatures contextual discretionary-ligatures;
+  font-feature-settings:"calt" 1,"liga" 1,"dlig" 1,"rlig" 1,"mark" 1,"mkmk" 1}
+.ex-w:hover,.ex-w:focus-visible{border-color:var(--amber);background:#FFF9E8}
+.ex-w.lig{border-color:#E0D2F0;background:#FBF7FF}   /* has a ligature worth seeing */
+.ex-w .hit{color:var(--book-red)}
+
+/* styles x positions matrix — the joined forms are where styles really differ */
+.style-matrix{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.sm-row{display:grid;grid-template-columns:52px repeat(4,1fr);align-items:center;gap:4px}
+.sm-head .sm-cell{font-size:9px;font-weight:700;color:var(--ink-faint);text-align:center}
+.sm-name{font-size:10.5px;font-weight:800;color:var(--ink-soft);text-align:start}
+.sm-cell{background:#F4FAF8;border:1px solid #D8ECE7;border-radius:9px;text-align:center;
+  padding:3px 0;min-height:0}
+.sm-head .sm-cell{background:none;border:0;padding:0}
+.sm-cell .g{font-size:30px;line-height:1.35;color:var(--book-blue);display:block}
+.st-naskh .sm-cell .g{font-family:"Amiri","Noto Naskh Arabic","Traditional Arabic",serif}
+.st-kufi .sm-cell .g{font-family:"Reem Kufi","Noto Kufi Arabic",sans-serif}
+.st-ruqaa .sm-cell .g{font-family:"Aref Ruqaa","Arabic Typesetting",serif}
+.st-modern .sm-cell .g{font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+
+/* calligraphic style comparison on the letter card */
+.style-row{display:flex;gap:6px;margin-top:8px;direction:rtl}
+.style-cell{flex:1;background:#F4FAF8;border:2px solid #D8ECE7;border-radius:12px;
+  padding:6px 2px;cursor:pointer;font-family:inherit}
+.style-cell:hover,.style-cell:focus-visible{border-color:var(--amber);background:#FFF9E8}
+.style-cell .g{display:block;font-size:34px;line-height:1.3;color:var(--book-blue)}
+.style-cell .l{font-size:9.5px;font-weight:700;color:var(--ink-faint)}
+.st-naskh .g{font-family:"Noto Naskh Arabic","Traditional Arabic","Amiri","Scheherazade New",serif}
+.st-kufi .g{font-family:"Noto Kufi Arabic","Reem Kufi",sans-serif}
+.st-ruqaa .g{font-family:"Aref Ruqaa","Arabic Typesetting",serif}
+.st-modern .g{font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+
+/* sticker album */
+.sticker-set{background:var(--card);border:2px solid var(--line);border-radius:14px;
+  padding:9px 11px;margin-top:8px}
+.sticker-set.full{border-color:var(--amber);background:#FFFBEE}
+.ss-head{display:flex;justify-content:space-between;font-size:12.5px;font-weight:800;
+  color:var(--ink-soft);text-transform:capitalize}
+.ss-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin-top:6px}
+.sticker{font-size:24px;text-align:center;line-height:1.35}
+.sticker.locked{opacity:.28;filter:grayscale(1);font-size:16px;color:var(--ink-faint)}
+.sticker-pop{font-size:96px;line-height:1.1;animation:stickerIn .7s cubic-bezier(.2,1.5,.4,1)}
+@keyframes stickerIn{0%{transform:scale(0) rotate(-40deg);opacity:0}
+  70%{transform:scale(1.25) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+
 .vowel-lab{border:2px dashed #C9D4D1;border-radius:16px;padding:12px 14px;margin-top:12px;text-align:center;background:#F8F9F8}
 .vowel-lab.unlocked{border-style:solid;border-color:var(--amber);background:#FFF9E8}
 .vlab-row{display:flex;gap:8px;justify-content:center;direction:rtl;margin-top:8px}
@@ -204,5 +369,9 @@ select{font-family:inherit;font-size:14px;font-weight:700;padding:6px 10px;borde
 @keyframes drop{to{transform:translateY(110vh) rotate(540deg)}}
 
 @media (prefers-reduced-motion: reduce){
-  .big-word.pop,.speaker.pulse,.burst,.confetti,#stars-pill.bump{animation:none}
+  .big-word.pop,.speaker.pulse,.burst,.confetti,#stars-pill.bump,
+  .fly-star,.plus-one,.s-star.just-won,.chest-big.shaking,.chest-big.opened,.chest-rays.on{animation:none}
+  .fly-star,.plus-one{display:none}
+  .chest-rays.on{opacity:.5}
+  .sticker-pop{animation:none}
 }

@@ -1,24 +1,23 @@
-// Iqra Quest service worker — network-first with offline cache fallback
-const CACHE = 'iqra-quest-v2';
-const SHELL = [
-  '.', 'index.html', 'css/app.css',
-  'js/app.js', 'js/i18n.js', 'js/letters.js',
-  'data/book.js', 'data/videos.js', 'manifest.webmanifest',
-];
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
-});
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
-  e.respondWith(
-    fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy));
-      return res;
-    }).catch(() => caches.match(e.request).then(hit => hit || caches.match('index.html')))
-  );
+// KILL SWITCH.
+//
+// An earlier cache-first service worker kept serving stale files, so code changes
+// were invisible until caches were cleared by hand. The browser always re-checks
+// THIS file on navigation, so it is the one thing that can reach a device already
+// running the old worker. It installs, wipes every cache, unregisters itself and
+// reloads open tabs. It deliberately has NO fetch handler, so nothing is intercepted.
+//
+// Offline support can return once the app settles — reinstate a versioned,
+// network-first worker then and re-register it from app.js.
+self.addEventListener('install', () => self.skipWaiting());
+
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+    await self.registration.unregister();
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const client of clients) {
+      try { client.navigate(client.url); } catch { /* tab may be closed */ }
+    }
+  })());
 });

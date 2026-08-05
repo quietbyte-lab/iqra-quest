@@ -30,10 +30,40 @@ window.LETTERS = {
   'و': { forms: ['و', 'و', 'ـو', 'ـو'], name: 'Waw', tts: 'وَ' },
   'ي': { forms: ['ي', 'يـ', 'ـيـ', 'ـي'], name: 'Yaa', tts: 'يَ' },
   'ء': { forms: ['ء', 'ء', 'ء', 'ء'], name: 'Hamza', tts: 'أَ' },
-  'أ': { forms: ['أ', 'أ', 'ـأ', 'ـأ'], name: 'Alif Hamza', tts: 'أَ' },
-  'إ': { forms: ['إ', 'إ', 'ـإ', 'ـإ'], name: 'Alif Hamza (kasrah)', tts: 'إِ' },
+  'أ': { forms: ['أ', 'أ', 'ـأ', 'ـأ'], name: 'Hamza on Alif', tts: 'أَ', special: true },
+  'إ': { forms: ['إ', 'إ', 'ـإ', 'ـإ'], name: 'Hamza under Alif', tts: 'إِ', special: true },
+  // Shapes the book teaches that are NOT one of the 28 base letters. They were being
+  // folded into their base letter, so a child meeting سُئِلَ or قُرِئَ on page 28 was
+  // shown the plain ي card and never the seat the hamza actually sits on.
+  'ؤ': { forms: ['ؤ', 'ؤ', 'ـؤ', 'ـؤ'], name: 'Hamza on Waw', tts: 'ؤُ', special: true },
+  'ئ': { forms: ['ئ', 'ئـ', 'ـئـ', 'ـئ'], name: 'Hamza on Yaa', tts: 'ئِ', special: true },
+  'ة': { forms: ['ة', '—', '—', 'ـة'], name: 'Taa Marbuta', tts: 'ةَ', special: true },
+  'ى': { forms: ['ى', '—', '—', 'ـى'], name: 'Alif Maqsura', tts: 'ى', special: true },
+  'لا': { forms: ['لا', '—', '—', 'ـلا'], name: 'Lam-Alif', tts: 'لَا', special: true },
 };
+// The book introduces these alongside the alphabet (page 7's grid even gives ء and لا
+// their own cells), so they get their own cards rather than being normalised away.
+window.SPECIALS = ['أ', 'إ', 'ء', 'ؤ', 'ئ', 'ة', 'ى', 'لا'];
+// use a character's OWN card when it has one; otherwise fall back to its base letter
+window.cardFor = ch => (window.LETTERS[ch] ? ch : window.baseLetter(ch));
 window.ALPHABET = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
+
+// Souvenirs — one set per REGION of the Atlas, not a bag of unrelated emoji.
+// The whole game is one journey: the child crosses a land, each chapter of the book is
+// a region, and finishing its pages brings back things found in THAT place. So the
+// reward always says where you have been, and the album doubles as a travel journal.
+window.STICKERS = [
+  { set: 'fathah',  items: ['🌾','🌻','🦋','🐝','🐞','🌷','🍎','🐣'] },
+  { set: 'kasrah',  items: ['🐟','🦆','🪷','🐸','🛶','🦢','🪨','🌊'] },
+  { set: 'dhammah', items: ['🐪','🌵','🏜️','🫖','🐍','🪬','🧭','🌅'] },
+  { set: 'madd',    items: ['🏔️','🦅','🐐','⛺','🌲','❄️','🧗','🔦'] },
+  { set: 'tanween', items: ['🦌','🦉','🍄','🐿️','🌰','🦊','🪵','🕯️'] },
+  { set: 'sukoon',  items: ['🐬','🐙','🐚','⛵','🦀','🐳','🏝️','🪸'] },
+  { set: 'rules',   items: ['🏛️','📜','🗝️','🏺','⚖️','🪔','🕰️','🎐'] },
+  { set: 'peak',    items: ['🕌','🌙','⭐','📖','🤲','🕋','✨','🏆'] },
+];
+window.ALL_STICKERS = STICKERS.flatMap(g => g.items.map(e => ({ e, set: g.set })));
+window.stickersOf = set => (STICKERS.find(g => g.set === set) || { items: [] }).items;
 // letters that never connect to the letter AFTER them (their start/middle forms look isolated)
 window.NON_CONNECTORS = new Set(['ا','أ','إ','د','ذ','ر','ز','و','ء']);
 window.VOWEL_MARKS = { fathah: 'َ', kasrah: 'ِ', dhammah: 'ُ' };

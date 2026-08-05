@@ -1,0 +1,30 @@
+/* Optional bundled Arabic calligraphy fonts.
+ *
+ * Windows ships almost no real Kufi or Ruqaa faces, so the letter card can only show
+ * one style out of the box. Run  python pipeline/fetch_fonts.py  to download these
+ * three (all SIL Open Font Licence, free to redistribute) into app/fonts/ and the
+ * card will start showing the same letter in Naskh, Kufi and Ruqaa side by side.
+ *
+ * If the files are absent these rules simply do nothing — the app falls back to
+ * whatever Arabic font the device has, and only offers styles it can really render.
+ */
+@font-face {
+  font-family: 'Amiri';
+  src: url('../fonts/Amiri-Regular.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Reem Kufi';
+  src: url('../fonts/ReemKufi-Regular.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aref Ruqaa';
+  src: url('../fonts/ArefRuqaa-Regular.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Naskh Arabic';
+  src: url('../fonts/NotoNaskhArabic-Regular.woff2') format('woff2');
+  font-display: swap;
+}

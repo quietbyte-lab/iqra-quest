@@ -52,6 +52,10 @@
   .demo button{border:0;background:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--ink)}
   .demo .star{font-size:11px;color:var(--amber)}
   .demo .add{color:var(--teal);font-weight:800}
+  .dispute{margin-top:7px;padding:7px 10px;background:var(--bg);border-radius:9px;
+    border:1px dashed var(--amber);font-size:12px}
+  .dispute div{margin:3px 0}
+  .dispute .arabic{font-size:17px;color:var(--blue)}
   .replabel{font-size:12px;color:var(--soft);margin-top:9px}
   .legend{font-size:11px;color:var(--faint);margin-top:-3px}
   .ctrl-label{font-size:12.5px;font-weight:800;color:var(--soft)}
@@ -226,12 +230,28 @@ function draw() {
     // Only offer a guess when there is real evidence — a low-confidence guess is noise
     // and guessing wrongly is what misled the labelling last time.
     const confident = g.letter && g.conf !== 'low';
-    const gTxt = confident
-      ? `💭 <b>I think this is <span class="g-let arabic">${g.letter}${MARK[L.vowel]}</span>
+    const gw = c.guessWord;
+    let gTxt;
+    if (gw) {
+      gTxt = `💭 <b>I think this is the word
+        <span class="g-let arabic">${gw.word}</span></b>
+        <span class="muted">— ${gw.conf} confidence (match ${gw.ratio}).</span>
+        <br><span class="muted">${g.why || ''}</span>`;
+    } else if (confident) {
+      gTxt = `💭 <b>I think this is <span class="g-let arabic">${g.letter}${MARK[L.vowel]}</span>
          “${LETTERS[g.letter]}”</b> <span class="muted">— ${g.conf} confidence, and I may still be
-         wrong.</span><br><span class="muted">${g.why || ''}</span>`
-      : `💭 <b>I don't know what this one is</b> — please tell me.
+         wrong.</span><br><span class="muted">${g.why || ''}</span>`;
+    } else {
+      gTxt = `💭 <b>I don't know what this one is</b> — please tell me.
          ${g.why ? `<br><span class="muted">${g.why}</span>` : ''}`;
+    }
+    // When my two methods disagree, show BOTH readings so you can settle it.
+    if (c.speech === 'unsure' && (c.arText || c.enText)) {
+      gTxt += `<div class="dispute"><b>⚖ My two methods disagreed:</b>
+        <div>read as <b>Arabic</b> → <span class="arabic">${c.arText || '—'}</span></div>
+        <div>read as <b>English</b> → “${c.enText || '—'}”</div>
+        <span class="muted">Whichever sounds right tells me if this is a drill or just talking.</span></div>`;
+    }
     div.innerHTML = `
       <div class="clhead">
         <button class="act play" data-all>▶ Play all</button>
