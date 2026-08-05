@@ -71,7 +71,14 @@ h3.sec{font-size:14px;color:var(--teal);margin:14px 0 8px}
 .tnode .big-ico{font-size:27px}
 .tnode .tt{font-weight:800;font-size:15px}
 .tnode .ts{font-size:11.5px;font-weight:700;color:var(--ink-faint)}
-.tnode .pts{margin-inline-start:auto;font-weight:800;color:#C98A00;font-size:13px;white-space:nowrap}
+.tnode .pts{margin-inline-start:auto;font-weight:800;color:#C98A00;font-size:13px;
+  white-space:nowrap;text-align:end;line-height:1.35}
+.tnode .pts-gem{color:#4A2E96;font-size:12px}
+/* how the rewards map onto the journey */
+.how-card{margin-top:14px}
+.how-row{display:flex;gap:9px;align-items:flex-start;margin-top:7px;font-size:12.5px;
+  color:var(--ink-soft);line-height:1.45}
+.how-i{font-size:18px;flex-shrink:0;width:24px;text-align:center}
 .tnode.done{opacity:.8;border-color:#FFD879;background:#FFFBEE;cursor:default}
 .tnode.done .tt{text-decoration:line-through}
 .tnode.current{border-color:var(--coral);transform:scale(1.03)}
@@ -192,6 +199,25 @@ button.island:hover,button.island:focus-visible{border-color:var(--teal)}
 .btn.back{background:#EDF1F0;color:var(--ink-soft);flex:.7;font-size:14px}
 .btn.ok.cooling{opacity:.45;transform:scale(.97)}   /* ignoring rapid repeat taps */
 .btn.ok{transition:opacity .15s,transform .15s}
+.help-row{display:flex;gap:8px;width:100%;padding:8px 4px 0}
+.help-row .btn{flex:1;font-size:13.5px;padding:10px 8px}
+.btn.hint-btn{background:#FFF3D6;color:var(--amber-dark);border:2px solid #F3D79B}
+.watch-btn{font-size:13.5px}
+
+/* hint card — how the word was built */
+.hint-box{text-align:center}
+.hint-full{font-size:62px;line-height:1.5;color:var(--book-blue);direction:rtl;margin:4px 0}
+.hint-split{font-size:12px;font-weight:800;color:var(--ink-faint);margin:2px 0 8px}
+.hcells{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;direction:rtl}
+.hcell{display:flex;flex-direction:column;align-items:center;gap:1px;
+  background:#F4FAF8;border:2px solid #D8ECE7;border-radius:14px;padding:7px 11px;min-width:62px}
+.h-joined{font-size:40px;line-height:1.4;color:var(--book-blue);cursor:pointer;border-radius:8px}
+.h-joined:hover,.h-joined:focus-visible{background:#FFF3D6}
+.h-down{font-size:15px;color:var(--amber);line-height:1}
+.h-base{font-size:34px;line-height:1.4;color:#0F6B63}
+.h-lbl{font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
+.hint-full .h,.h-joined .h,.h-base .h{color:var(--book-red)}
+
 .parent-lbl{font-size:10px;color:#B3BCB8;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:center;margin-top:8px}
 /* one big star per correct reading -> flies into the counter */
 .fly-star{position:fixed;pointer-events:none;z-index:60;font-size:60px;
@@ -282,6 +308,10 @@ button.island:hover,button.island:focus-visible{border-color:var(--teal)}
   margin-top:-2px;direction:ltr}
 .st-classical{font-family:"Amiri",serif !important;
   font-feature-settings:"calt" 1,"liga" 1,"dlig" 1,"rlig" 1,"mark" 1,"mkmk" 1 !important}
+/* The simplified half. Only rlig is dropped — switching calt/liga off as well was
+   tried and measured to change nothing, because ordinary words have no contextual
+   alternates to disable. The visible difference between the two halves comes from
+   the font itself (Noto Naskh is a simplified naskh), not from these switches. */
 .st-simple{font-family:"Noto Naskh Arabic","Scheherazade New",serif !important;
   font-feature-settings:"calt" 1,"liga" 1,"rlig" 0,"mark" 1,"mkmk" 1 !important}
 .more-btn{font-size:14px}

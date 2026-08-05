@@ -95,6 +95,26 @@ function tasksFor(dateKey = todayKey()) {
 function dayComplete(dateKey) { const ts = tasksFor(dateKey); return ts.length > 0 && ts.every(x => x.done); }
 
 // ---------------- content helpers ----------------
+// What is actually NEW on this page, derived from the book data rather than asserted.
+// If nothing is new, say so honestly — it is practice, and pretending otherwise is
+// how a child stops trusting the label.
+function pageSummary(p) {
+  const pg = BOOK.pages[p];
+  if (!pg) return '';
+  const vowel = pg.vowel || (p <= 18 ? 'fathah' : p <= 23 ? 'kasrah' : 'dhammah');
+  if (pg.type === 'letters') return t('sumLetters')(t('v_' + vowel));
+  const words = pg.words || [];
+  const lens = words.map(w => baseLettersOf(w).length);
+  const avg = lens.reduce((a, b) => a + b, 0) / Math.max(1, lens.length);
+  const hasSentence = words.some(w => w.includes(' '));
+  // first page in the book to introduce this vowel in words?
+  const firstOfVowel = { fathah: 8, kasrah: 20, dhammah: 25 }[vowel] === p;
+  if (hasSentence) return t('sumSentences');
+  if (firstOfVowel) return t('sumFirstWords')(t('v_' + vowel));
+  if (avg < 2.6) return t('sumBlend')(t('v_' + vowel));
+  return t('sumPractice')(Math.round(avg), t('v_' + vowel));
+}
+
 function pageItems(p) {                            // what the child reads on this page
   const pg = BOOK.pages[p];
   if (!pg) return [];
@@ -225,11 +245,12 @@ const chapterFor = page => CHAPTERS.find(c => page >= c.from && page <= c.to) ||
 
 // Certificates earned with gems — the revision payoff you can print and take to the
 // teacher. Thresholds rise so each one takes a real stretch of revision to reach.
+// Diamonds are pages finished, so these are page-count milestones, not word counts.
 const CERTIFICATES = [
-  { id: 'c1', gems: 50, key: 'certSteady' },
-  { id: 'c2', gems: 150, key: 'certStrong' },
-  { id: 'c3', gems: 300, key: 'certExpert' },
-  { id: 'c4', gems: 600, key: 'certMaster' },
+  { id: 'c1', gems: 10, key: 'certSteady' },
+  { id: 'c2', gems: 30, key: 'certStrong' },
+  { id: 'c3', gems: 60, key: 'certExpert' },
+  { id: 'c4', gems: 120, key: 'certMaster' },
 ];
 function checkCertificates() {
   const earned = CERTIFICATES.filter(c => (state.gems || 0) >= c.gems && !state.certificates.includes(c.id));
@@ -381,6 +402,11 @@ function hasLigature(word) {
   return (_ligCache[word] = Math.abs(on - off) / Math.max(on, off) > 0.03);
 }
 // Several real words per position, tricky joins first.
+// Match the character's OWN card, not its base letter: ئ, ؤ and ة have their own cards
+// now, so a word like سَئِمَ belongs to ئ and must not be offered as an example of ي.
+const cardLettersOf = word =>
+  [...word].filter(ch => !HARAKA_RE.test(ch) && ch !== 'ـ').map(cardFor);
+
 function bookExamples(letter, perPos = 3) {
   const seen = new Set(), out = [];
   for (const pos of ['start', 'middle', 'end']) {
@@ -389,7 +415,7 @@ function bookExamples(letter, perPos = 3) {
       const items = meta.type === 'letters' ? (meta.strip || []) : (meta.words || []);
       for (const w of items) {
         if (w.length > 16 || seen.has(w) || found.some(f => f.word === w)) continue;
-        const base = baseLettersOf(w);
+        const base = cardLettersOf(w);
         const i = base.indexOf(letter);
         if (i < 0 || base.length < 2) continue;
         const where = i === 0 ? 'start' : i === base.length - 1 ? 'end' : 'middle';
@@ -398,13 +424,26 @@ function bookExamples(letter, perPos = 3) {
         // fragments ending in tatweel. Neither is a word, so they make poor examples.
         const drillPair = base.length === 2 && base[0] === base[1];
         const fragment = w.includes('ـ');
-        found.push({ word: w, page: +p, n: base.length, real: !drillPair && !fragment });
+        found.push({ word: w, page: +p, n: base.length, real: !drillPair && !fragment,
+                     nb: neighbourOf(w, letter, pos) });
       }
     }
     // real words first, then ones showing a ligature, then shorter (easier to read)
     found.sort((a, b) => (b.real - a.real)
       || (hasLigature(b.word) - hasLigature(a.word)) || a.n - b.n);
-    for (const f of found.slice(0, perPos)) {
+    // Then pick across DIFFERENT neighbouring letters, so the examples span the range
+    // of joined shapes rather than repeating one. Falls back to any word if needed.
+    const picked = [], usedNb = new Set();
+    for (const f of found) {
+      if (picked.length >= perPos) break;
+      if (usedNb.has(f.nb)) continue;
+      usedNb.add(f.nb); picked.push(f);
+    }
+    for (const f of found) {
+      if (picked.length >= perPos) break;
+      if (!picked.includes(f)) picked.push(f);
+    }
+    for (const f of picked) {
       seen.add(f.word);
       out.push({ ...f, posKey: pos, lig: hasLigature(f.word) });
     }
@@ -422,6 +461,73 @@ function markLetter(word, letter) {
     else html += ch;
   }
   return html + (open ? '</span>' : '');
+}
+
+// Which letter FOLLOWS ours decides the joined shape: ي before ه is drawn quite
+// differently from ي before ن. Covering distinct neighbours therefore covers the
+// spectrum of shapes the child will actually meet, rather than three lookalikes.
+function neighbourOf(word, letter, pos) {
+  const base = cardLettersOf(word);
+  const i = base.indexOf(letter);
+  if (i < 0) return '';
+  return pos === 'end' ? (base[i - 1] || '^') : (base[i + 1] || '$');
+}
+
+// ---------------- hint card: how this word was built ----------------
+// Split a word into letters, each keeping its own harakat.
+function splitWord(word) {
+  const out = [];
+  for (const ch of word) {
+    if (HARAKA_RE.test(ch)) { if (out.length) out[out.length - 1].marks += ch; continue; }
+    if (ch === 'ـ' || ch === ' ') continue;
+    out.push({ ch, marks: '' });
+  }
+  return out;
+}
+// Which of the four forms a letter takes here depends on BOTH neighbours: it joins
+// backwards only if the letter before it connects forward, and joins forward only if
+// it is itself a connector (ا د ذ ر ز و never connect to what follows).
+function formInWord(parts, i) {
+  const base = parts.map(p => cardFor(p.ch));
+  const back = i > 0 && !NON_CONNECTORS.has(base[i - 1]);
+  const fwd = i < parts.length - 1 && !NON_CONNECTORS.has(base[i]);
+  const idx = back && fwd ? 2 : back ? 3 : fwd ? 1 : 0;
+  const info = LETTERS[base[i]];
+  return { form: info ? info.forms[idx] : parts[i].ch, idx, base: base[i] };
+}
+// "How was this word made?" — the full word, then the pieces exactly as they appear
+// joined up, then each piece's plain letter underneath. Harakat are carried at every
+// level, because the mark is half of what the child is decoding.
+function showHint(word) {
+  const parts = splitWord(word);
+  const lbls = [t('alone'), t('start'), t('middle'), t('end')];
+  // The haraka must sit on the LETTER, not on the tatweel that shows the join —
+  // appending it to the end of "ظـ" parks the fathah on the connector stroke.
+  const withMarks = (form, base, marks) => {
+    if (!marks) return form;
+    const i = form.indexOf(base);
+    return i < 0 ? form + marks : form.slice(0, i + base.length) + marks + form.slice(i + base.length);
+  };
+  const cells = parts.map((p, i) => {
+    const f = formInWord(parts, i);
+    return `<div class="hcell">
+      <span class="h-joined arabic" data-say="${f.base}${p.marks}">${withMarks(f.form, f.base, p.marks)}</span>
+      <span class="h-down">↓</span>
+      <span class="h-base arabic">${f.base}${p.marks}</span>
+      <span class="h-lbl">${lbls[f.idx]}</span>
+    </div>`;
+  }).join('');
+  const ov = overlay(`<div class="hint-box">
+    <h4>${t('hintTitle')}</h4>
+    <div class="hint-full arabic">${word}</div>
+    <div class="hint-split">${t('hintSplit')}</div>
+    <div class="hcells">${cells}</div>
+    <p class="muted">${t('hintFoot')}</p>
+    <button class="btn primary big" data-close>${t('gotItHint')}</button>
+  </div>`);
+  ov.querySelectorAll('.h-joined[data-say]').forEach(s =>
+    s.addEventListener('click', () => tts(s.dataset.say)));
+  ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
 }
 
 // letter card popover
@@ -448,7 +554,7 @@ function showLetterCard(L, { log = false } = {}) {
   // Each example is shown TWICE — the classical Naskh (Amiri, with its stacked joins)
   // beside the simplified Naskh (Noto). Seeing them side by side is the point: it proves
   // the two are the same letter rather than two different symbols to learn.
-  const ex = bookExamples(b, 2);
+  const ex = bookExamples(b, 3);
   const group = pos => {
     const rows = ex.filter(e => e.posKey === pos);
     if (!rows.length) return '';
@@ -541,10 +647,15 @@ function renderToday(view) {
     const icon = task.kind === 'learn' ? '🎬' : task.kind === 'daily' ? '🔁' : '🎒';
     const label = task.kind === 'learn' ? `${t('newPage')} ${task.page} — ${t('firstTime')}` :
       task.kind === 'daily' ? `${t('dailyRead')} · ${task.page}` : `${t('review')} · ${task.page}`;
-    const sub = task.kind === 'learn' ? t('videoThenDaily') : task.kind === 'daily' ? t('dayOfDaily')() : t('fromBackpack');
-    const pts = task.kind === 'learn' ? 12 : 6;
+    // Say what this page actually holds, not a generic label
+    const sub = pageSummary(task.page) ||
+      (task.kind === 'learn' ? t('videoThenDaily') : task.kind === 'daily' ? t('dayOfDaily')() : t('fromBackpack'));
+    // Show what this task actually pays: a star for every word, one diamond for the page.
+    const words = pageItems(task.page).length;
     const node = el('button', 'tnode' + (task.done ? ' done' : task === firstPending ? ' current' : ''));
-    node.innerHTML = `<span class="big-ico">${icon}</span><div><div class="tt">${label}</div><div class="ts">${sub}</div></div><span class="pts">+${pts} ⭐</span>`;
+    node.innerHTML = `<span class="big-ico">${icon}</span>
+      <div><div class="tt">${label}</div><div class="ts">${sub}</div></div>
+      <span class="pts">${words}⭐<br><span class="pts-gem">+1💎</span></span>`;
     if (!task.done) node.addEventListener('click', () =>
       task.kind === 'learn' ? go('learn', { page: task.page, taskId: task.id }) : go('practice', { page: task.page, taskId: task.id, kind: task.kind }));
     path.appendChild(node);
@@ -616,6 +727,16 @@ function renderAtlas(view) {
   const discovered = Object.keys(state.completions).length;
   wrap.appendChild(el('div', 'atlas-head', t('pagesDiscovered')(discovered, 108)));
   wrap.appendChild(el('div', 'muted center', t('atlasHint')));
+  // Straight jump to any page — hunting through regions is slow when you know the number.
+  const avail = Object.keys(BOOK.pages).map(Number).sort((a, b) => a - b);
+  const jump = el('div', 'card jump-card');
+  jump.innerHTML = `<b style="font-size:13px">${t('jumpTo')}</b>
+    <div class="jump-row"><select id="jump-sel">${
+      avail.map(p => `<option value="${p}">${t('pageWord')} ${p} — ${pageSummary(p)}</option>`).join('')
+    }</select><button class="btn primary" id="jump-go">${t('jumpGo')}</button></div>`;
+  wrap.appendChild(jump);
+  jump.querySelector('#jump-go').addEventListener('click', () =>
+    go('practice', { page: +jump.querySelector('#jump-sel').value, taskId: null, kind: 'free' }));
   for (const ch of CHAPTERS) {
     const pages = Object.keys(BOOK.pages).map(Number).filter(p => p >= ch.from && p <= ch.to);
     const total = ch.to - ch.from + 1;
@@ -642,6 +763,21 @@ function renderAtlas(view) {
   }
   const total = ALL_STICKERS.length;
   wrap.appendChild(el('div', 'muted center', t('souvTotal')(state.stickers.length, total)));
+
+  // How the rewards map onto the journey, stated plainly. Each has one job:
+  // stars = effort, diamonds = pages finished, souvenirs = new ground, certificates
+  // = milestones. Without this the four just look like four kinds of confetti.
+  const nextCert = CERTIFICATES.find(c => !state.certificates.includes(c.id));
+  const how = el('div', 'card how-card');
+  how.innerHTML = `<b style="font-size:14px">${t('howRewards')}</b>
+    <div class="how-row"><span class="how-i">⭐</span><span>${t('howStars')}</span></div>
+    <div class="how-row"><span class="how-i">💎</span><span>${t('howGems')}</span></div>
+    <div class="how-row"><span class="how-i">🎟️</span><span>${t('howSouv')}</span></div>
+    <div class="how-row"><span class="how-i">📜</span><span>${
+      nextCert ? t('howCertNext')(nextCert.gems - (state.gems || 0), nextCert.gems)
+               : t('howCertAll')}</span></div>
+    <div class="how-row"><span class="how-i">🏁</span><span>${t('howGate')}</span></div>`;
+  wrap.appendChild(how);
   view.appendChild(wrap);
 }
 
@@ -790,6 +926,20 @@ function renderPractice(view, { page, taskId, kind }) {
   const word = el('div', 'big-word arabic');
   stage.appendChild(word);
   const lookup = el('div', 'lookup-hint', t('confused'));
+  // Stuck mid-page? The teacher's lesson for THIS page is one tap away, without
+  // losing your place — you come straight back to the same word.
+  const vids = (window.VIDEOS && VIDEOS[page]) || [];
+  const hintBtn = el('button', 'btn hint-btn', t('hintBtn'));
+  hintBtn.addEventListener('click', () => showHint(items[idx]));
+  const helpBtn = vids.length ? el('button', 'btn ghost watch-btn', t('watchVideo')) : null;
+  if (helpBtn) helpBtn.addEventListener('click', () => {
+    const ov = overlay(`<div class="video-wrap" style="margin-bottom:10px">
+        <iframe allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen src="https://www.youtube-nocookie.com/embed/${vids[0]}"></iframe></div>
+      <p class="muted">${t('watchHint')(page)}</p>
+      <button class="btn primary big" data-close>${t('backToWord')}</button>`);
+    ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
+  });
   const speaker = el('button', 'speaker', '🔊'); speaker.setAttribute('aria-label', 'play');
   const plabel = el('div', 'parent-lbl', t('parentCheck'));
   const row = el('div', 'parent-row');
@@ -797,7 +947,11 @@ function renderPractice(view, { page, taskId, kind }) {
   const againBtn = el('button', 'btn again', t('tryAgain'));
   const okBtn = el('button', 'btn ok', t('gotIt'));
   row.append(backBtn, againBtn, okBtn);
-  cont.append(sprintRow, hint, stage, lookup, speaker, plabel, row);
+  cont.append(sprintRow, hint, stage, lookup, speaker);
+  const helpRow = el('div', 'help-row');
+  helpRow.appendChild(hintBtn);
+  if (helpBtn) helpRow.appendChild(helpBtn);
+  cont.append(helpRow, plabel, row);
   // Stars are only ever awarded once per word, so stepping back and forth can never
   // double-count — and going back never takes a star away from the child.
   const awarded = new Set();
@@ -892,10 +1046,10 @@ function renderPractice(view, { page, taskId, kind }) {
     if (!awarded.has(idx)) {
       awarded.add(idx);
       SFX.star();
-      const isRev = kind === 'rev';
-      flyingStar(wr.left + wr.width / 2, wr.top + wr.height / 2, isRev ? '💎' : '⭐');
-      starBurst(wr.left + wr.width / 2, wr.top + wr.height / 2, 5, isRev ? '💎' : '⭐');
-      if (isRev) bumpGems(1); else bumpStars(1);
+      // Every word pays a star, new page or revision alike — the effort is the same.
+      flyingStar(wr.left + wr.width / 2, wr.top + wr.height / 2, '⭐');
+      starBurst(wr.left + wr.width / 2, wr.top + wr.height / 2, 5, '⭐');
+      bumpStars(1);
       const stars = sprintRow.querySelectorAll('.s-star');
       const inSprint = idx % SPRINT;
       if (stars[inSprint]) { stars[inSprint].classList.add('lit', 'just-won'); }
@@ -903,7 +1057,7 @@ function renderPractice(view, { page, taskId, kind }) {
     idx++;
     if (idx >= items.length) return setTimeout(finish, 700);   // let the star land first
     if (idx % SPRINT === 0) {
-      if (kind === 'rev') bumpGems(6); else bumpStars(6);
+      bumpStars(6);                                   // sprint chest pays in stars too
       SFX.chest();
       state.chestCount = (state.chestCount || 0) + 1; save();
       // surprise sticker every 3rd chest — unpredictable enough to stay exciting
@@ -922,10 +1076,11 @@ function renderPractice(view, { page, taskId, kind }) {
   });
 
   function finish() {
-    const isRev = kind === 'rev';
-    const bonus = kind === 'learn' ? 12 : 6;
-    if (isRev) { bumpGems(6); bumpGems(bonus); }         // revision pays in gems throughout
-    else { bumpStars(6); bumpStars(bonus); }
+    bumpStars(6);                                       // final sprint chest
+    // A DIAMOND is the reward for finishing a whole page — rare, so it is the valuable
+    // one. Stars measure effort word by word; diamonds measure pages carried to the end.
+    bumpGems(1);
+    const firstTime = !state.completions[page];         // never finished before
     state.completions[page] = (state.completions[page] || 0) + 1;
     if (kind === 'learn') state.firstDone[page] = true;
     for (const L of newCardLetters(page)) state.cards.push(L);
@@ -934,7 +1089,8 @@ function renderPractice(view, { page, taskId, kind }) {
     if (taskId) state.daily[tk][taskId] = true;
     let chestMsg = '';
     if (tasksFor(tk).every(x => x.done) && !state.daily[tk].chest) {
-      state.daily[tk].chest = true; bumpStars(10); chestMsg = `<p style="font-weight:800;color:var(--green)">${t('chestOpen')}</p>`;
+      state.daily[tk].chest = true; bumpStars(10); bumpGems(1);   // the whole day done
+      chestMsg = `<p style="font-weight:800;color:var(--green)">${t('chestOpen')}</p>`;
       const last = state.streak.last;
       const y = new Date(); y.setDate(y.getDate() - 1);
       state.streak.count = (last === dkey(y)) ? state.streak.count + 1 : 1;
@@ -948,7 +1104,7 @@ function renderPractice(view, { page, taskId, kind }) {
         <div class="chest-rays"></div>
       </div>
       <h4>${t('pageDone')(page)}</h4>
-      <p class="muted">${t('plusStars')(bonus + 6)}</p>${chestMsg}
+      <p class="muted">${t('pageHaul')(items.length + 6)}</p>${chestMsg}
       <button class="btn primary big" data-home>${t('great')}</button>`);
     const chest = ov.querySelector('#chest-big');
     chest.classList.add('shaking');
@@ -962,7 +1118,10 @@ function renderPractice(view, { page, taskId, kind }) {
     }, 900);
     ov.querySelector('[data-home]').addEventListener('click', () => {
       ov.remove();
-      awardSticker(page);              // finishing a page always earns one, from its region
+      // A souvenir marks NEW ground — the first time a page is finished. Diamonds keep
+      // paying for every re-read, so revision still counts, but the collection tracks
+      // how far through the book you have actually travelled.
+      if (firstTime) awardSticker(page);
       go('today');
     });
   }
