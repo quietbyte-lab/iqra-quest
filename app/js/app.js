@@ -4,7 +4,7 @@
 // ---------------- state ----------------
 // ⚠ TESTING ONLY — set to false before publishing. Makes the Parents lock a trivial
 // sum so the homework screen can be reached quickly while trying things out.
-const EASY_PARENT_GATE = true;
+const EASY_PARENT_GATE = false;
 
 const STORE_KEY = 'iqra-quest-v1';
 const DEFAULT_STATE = {
