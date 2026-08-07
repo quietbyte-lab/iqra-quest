@@ -80,8 +80,13 @@ def detect(report_only=True):
         for mind in (0.22, 0.28, 0.34, 0.40, 0.46):
             segs, dur = segments(p, mind)
             ws = word_sized(segs)
-            run = longest_even_run(ws)
-            for cand, how in ((ws, "all"), (run, "run")):
+            # NOTE: the "longest even run" filter used to be a candidate here. It threw
+            # away everything outside one evenly-paced stretch, which silently discarded
+            # the first 2.5 minutes of f5 — page 24's whole letter grid — because the
+            # grid is read at a different pace from the word drills. Never drop audio to
+            # make a count fit; alignment can handle extra segments, it cannot invent
+            # missing ones.
+            for cand, how in ((ws, "all"),):
                 gap = abs(len(cand) - expected)
                 if best is None or gap < best["gap"]:
                     best = {"gap": gap, "n": len(cand), "mind": mind, "how": how,

@@ -2,8 +2,14 @@
 'use strict';
 
 // ---------------- state ----------------
+// ⚠ TESTING ONLY — set to false before publishing. Makes the Parents lock a trivial
+// sum so the homework screen can be reached quickly while trying things out.
+const EASY_PARENT_GATE = true;
+
 const STORE_KEY = 'iqra-quest-v1';
 const DEFAULT_STATE = {
+  wordDone: {},                                   // page -> { wordIndex: dateKey } so a
+                                                  // half-finished page can be resumed
   gems: 0, certificates: [], unlocks: [],         // revision currency + what it bought
   stickers: [], chestCount: 0,                    // sticker album + chests since last reward
   stars: 0, lang: 'en', weekStart: 6,            // 6 = Saturday
@@ -31,6 +37,7 @@ function applyDir() { document.documentElement.dir = state.lang === 'ar' ? 'rtl'
 
 // ---------------- dates & week ----------------
 const dkey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const shortDay = k => t('daysShort')[new Date(k + 'T12:00').getDay()] || '';
 const todayKey = () => dkey(new Date());
 function weekStartDate(ref = new Date()) {
   const d = new Date(ref); d.setHours(12, 0, 0, 0);
@@ -512,14 +519,23 @@ function showHint(word) {
     const f = formInWord(parts, i);
     return `<div class="hcell">
       <span class="h-joined arabic" data-say="${f.base}${p.marks}">${withMarks(f.form, f.base, p.marks)}</span>
-      <span class="h-down">↓</span>
       <span class="h-base arabic">${f.base}${p.marks}</span>
       <span class="h-lbl">${lbls[f.idx]}</span>
     </div>`;
   }).join('');
+  // Each letter of the whole word is wrapped so an arrow can be drawn from it down to
+  // its own piece — showing where each piece CAME FROM, which is the point of the card.
+  let wordHtml = '', li = -1;
+  for (const ch of word) {
+    if (HARAKA_RE.test(ch)) { wordHtml += `<span class="h">${ch}</span>`; continue; }
+    if (ch === 'ـ') { wordHtml += ch; continue; }
+    li++;
+    wordHtml += `<span class="hw" data-i="${li}">${ch}</span>`;
+  }
   const ov = overlay(`<div class="hint-box">
     <h4>${t('hintTitle')}</h4>
-    <div class="hint-full arabic">${word}</div>
+    <div class="hint-full arabic">${wordHtml}</div>
+    <svg class="hint-links" aria-hidden="true"></svg>
     <div class="hint-split">${t('hintSplit')}</div>
     <div class="hcells">${cells}</div>
     <p class="muted">${t('hintFoot')}</p>
@@ -528,6 +544,35 @@ function showHint(word) {
   ov.querySelectorAll('.h-joined[data-say]').forEach(s =>
     s.addEventListener('click', () => tts(s.dataset.say)));
   ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
+  const redraw = () => drawHintLinks(ov.querySelector('.hint-box'));
+  requestAnimationFrame(redraw);
+  addEventListener('resize', redraw);
+  return ov;
+}
+
+// Curved arrows from each letter in the whole word down to the piece it became.
+function drawHintLinks(box) {
+  const svg = box.querySelector('.hint-links');
+  const letters = [...box.querySelectorAll('.hint-full .hw')];
+  const cells = [...box.querySelectorAll('.hcell')];
+  if (!svg || !letters.length) return;
+  const br = box.getBoundingClientRect();
+  svg.setAttribute('width', br.width);
+  svg.setAttribute('height', br.height);
+  svg.setAttribute('viewBox', `0 0 ${br.width} ${br.height}`);
+  let d = '';
+  for (let i = 0; i < Math.min(letters.length, cells.length); i++) {
+    const l = letters[i].getBoundingClientRect(), c = cells[i].getBoundingClientRect();
+    const x1 = l.left + l.width / 2 - br.left, y1 = l.bottom - br.top - 6;
+    const x2 = c.left + c.width / 2 - br.left, y2 = c.top - br.top - 3;
+    const dy = Math.max(18, (y2 - y1) * 0.45);
+    d += `<path d="M${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}"
+      fill="none" stroke="var(--coral)" stroke-width="2.5" stroke-linecap="round"
+      marker-end="url(#hint-tip)"/>`;
+  }
+  svg.innerHTML = `<defs><marker id="hint-tip" viewBox="0 0 10 10" refX="7" refY="5"
+      markerWidth="4.5" markerHeight="4.5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--coral)"/></marker></defs>${d}`;
 }
 
 // letter card popover
@@ -918,7 +963,7 @@ function renderPractice(view, { page, taskId, kind }) {
   const isLetters = BOOK.pages[page].type === 'letters';
   const SPRINT = 6;
   const sprints = Math.ceil(items.length / SPRINT);
-  let idx = 0;
+  let idx = 0;   // set below to the first word still due today
   const cont = el('div', null); cont.id = 'prac'; view.appendChild(cont);
   const sprintRow = el('div', 'sprint');
   const hint = el('div', 'prac-hint');
@@ -929,6 +974,37 @@ function renderPractice(view, { page, taskId, kind }) {
   // Stuck mid-page? The teacher's lesson for THIS page is one tap away, without
   // losing your place — you come straight back to the same word.
   const vids = (window.VIDEOS && VIDEOS[page]) || [];
+  // Word map: the whole page at a glance, showing what was read today, what was read
+  // on an earlier day, and what is still due. Tapping a word JUMPS to it and pays
+  // nothing — looking back at a word should never be worth stars.
+  const mapBtn = el('button', 'btn map-btn', t('wordMapBtn'));
+  mapBtn.addEventListener('click', () => {
+    const done = doneMap();
+    const cells = items.map((w, i) => {
+      const d = done[i];
+      const cls = d === tkNow ? 'today' : d ? 'earlier' : 'due';
+      const when = d === tkNow ? t('mapToday') : d ? shortDay(d) : '';
+      return `<button class="wm ${cls}${i === idx ? ' here' : ''}" data-i="${i}">
+        <span class="wm-n">${i + 1}</span>
+        <span class="wm-w arabic">${w.length > 12 ? w.slice(0, 12) + '…' : w}</span>
+        <span class="wm-d">${when}</span></button>`;
+    }).join('');
+    const ov = overlay(`<div class="wmap">
+      <h4>${t('wordMapTitle')(page)}</h4>
+      <p class="muted">${t('wordMapSub')(Object.values(done).filter(d => d === tkNow).length, items.length)}</p>
+      <div class="wm-grid">${cells}</div>
+      <div class="wm-key">
+        <span><i class="wm today"></i>${t('mapToday')}</span>
+        <span><i class="wm earlier"></i>${t('mapEarlier')}</span>
+        <span><i class="wm due"></i>${t('mapDue')}</span>
+      </div>
+      <button class="btn primary big" data-close>${t('backToWord')}</button>
+    </div>`);
+    ov.querySelectorAll('.wm[data-i]').forEach(b => b.addEventListener('click', () => {
+      idx = +b.dataset.i; ov.remove(); drawWord();
+    }));
+    ov.querySelector('[data-close]').addEventListener('click', () => ov.remove());
+  });
   const hintBtn = el('button', 'btn hint-btn', t('hintBtn'));
   hintBtn.addEventListener('click', () => showHint(items[idx]));
   const helpBtn = vids.length ? el('button', 'btn ghost watch-btn', t('watchVideo')) : null;
@@ -949,12 +1025,20 @@ function renderPractice(view, { page, taskId, kind }) {
   row.append(backBtn, againBtn, okBtn);
   cont.append(sprintRow, hint, stage, lookup, speaker);
   const helpRow = el('div', 'help-row');
-  helpRow.appendChild(hintBtn);
+  helpRow.append(mapBtn, hintBtn);
   if (helpBtn) helpRow.appendChild(helpBtn);
   cont.append(helpRow, plabel, row);
   // Stars are only ever awarded once per word, so stepping back and forth can never
   // double-count — and going back never takes a star away from the child.
-  const awarded = new Set();
+  // Seeded from what was already read TODAY, so a page picked up later resumes where
+  // it stopped instead of paying out again from the start.
+  const tkNow = todayKey();
+  const doneMap = () => (state.wordDone[page] = state.wordDone[page] || {});
+  const awarded = new Set(
+    Object.entries(doneMap()).filter(([, d]) => d === tkNow).map(([k]) => +k));
+  // Resume at the first word still due today rather than restarting the page.
+  idx = items.findIndex((_, i) => !awarded.has(i));
+  if (idx < 0) idx = 0;
   let busy = false;
 
   function sprintNo() { return Math.floor(idx / SPRINT); }
@@ -1000,6 +1084,8 @@ function renderPractice(view, { page, taskId, kind }) {
       }
     }
     if (open) html += '</span>';
+    // A single letter has nothing to break down, so the hint would just repeat itself.
+    hintBtn.hidden = baseLettersOf(text).length < 2;
     word.innerHTML = html;
     // per-word letterform: the book alternates between the stacked ligature and the
     // flat baseline form, so honour the recorded shape where we have one
@@ -1014,6 +1100,11 @@ function renderPractice(view, { page, taskId, kind }) {
   addEventListener('resize', fitWord);
   function play() {
     speaker.classList.add('pulse'); setTimeout(() => speaker.classList.remove('pulse'), 1500);
+    // A recording made FOR this page is the most faithful source, so prefer it — even
+    // on a letters page, whose cells would otherwise route to the shared letter library
+    // and fall back to speech synthesis when that library is empty.
+    const pageFile = `audio/pages/p${page}/${String(idx + 1).padStart(2, '0')}.mp3`;
+    if (AUDIO.has(pageFile)) return playItem(page, idx, items[idx]);
     const base = baseLettersOf(items[idx]);
     // grid cells are single letters (لَا and هَـ still resolve to ل / ه)
     if (isLetters && idx < BOOK.pages[page].grid.length && base.length && LETTERS[base[0]]) {
@@ -1045,6 +1136,7 @@ function renderPractice(view, { page, taskId, kind }) {
     const wr = word.getBoundingClientRect();
     if (!awarded.has(idx)) {
       awarded.add(idx);
+      doneMap()[idx] = tkNow; save();      // remember it, so the page can be resumed
       SFX.star();
       // Every word pays a star, new page or revision alike — the effort is the same.
       flyingStar(wr.left + wr.width / 2, wr.top + wr.height / 2, '⭐');
@@ -1132,16 +1224,19 @@ function renderPractice(view, { page, taskId, kind }) {
 let parentUnlocked = false;
 function renderParentGate(view) {
   if (parentUnlocked) return renderParent(view);
-  // Two-digit multiplication: trivial for an adult, out of reach for an early reader,
-  // and far too large a range to guess (single-digit addition was guessable).
-  const a = 12 + Math.floor(Math.random() * 8);        // 12-19
-  const b = 6 + Math.floor(Math.random() * 8);         // 6-13
-  const answer = a * b;
+  // EASY_PARENT_GATE keeps this trivial while testing. The real lock is two-digit
+  // multiplication: easy for an adult, out of reach for an early reader, and far too
+  // wide a range to guess (single-digit addition was guessable by a 5-year-old).
+  const a = EASY_PARENT_GATE ? 1 + Math.floor(Math.random() * 4) : 12 + Math.floor(Math.random() * 8);
+  const b = EASY_PARENT_GATE ? 1 + Math.floor(Math.random() * 4) : 6 + Math.floor(Math.random() * 8);
+  const answer = EASY_PARENT_GATE ? a + b : a * b;
+  const sign = EASY_PARENT_GATE ? '+' : '×';
   const wrap = el('div', 'pad center');
-  wrap.appendChild(el('div', 'card', `<div class="gate-q">🔒 ${t('gateQ')} ${a} × ${b}?</div>
+  wrap.appendChild(el('div', 'card', `<div class="gate-q">🔒 ${t('gateQ')} ${a} ${sign} ${b}?</div>
     <input class="gate-in" id="gate-in" type="number" inputmode="numeric" autocomplete="off">
     <div style="margin-top:12px"><button class="btn primary" id="gate-go">${t('enter')}</button></div>
-    <div class="muted" style="margin-top:8px">${t('gateHint')}</div>`));
+    ${EASY_PARENT_GATE ? `<div class="test-warn">${t('testGate')}</div>`
+                       : `<div class="muted" style="margin-top:8px">${t('gateHint')}</div>`}`));
   view.appendChild(wrap);
   let tries = 0;
   const attempt = () => {

@@ -202,19 +202,42 @@ button.island:hover,button.island:focus-visible{border-color:var(--teal)}
 .help-row{display:flex;gap:8px;width:100%;padding:8px 4px 0}
 .help-row .btn{flex:1;font-size:13.5px;padding:10px 8px}
 .btn.hint-btn{background:#FFF3D6;color:var(--amber-dark);border:2px solid #F3D79B}
+.btn.map-btn{background:#EDF3FF;color:var(--chip-blue);border:2px solid #C3D9F5}
+
+/* word map — the whole page at a glance */
+.wmap{text-align:center}
+.wm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px;
+  margin:10px 0;max-height:46dvh;overflow-y:auto;direction:rtl}
+.wm{display:flex;flex-direction:column;align-items:center;gap:1px;border-radius:11px;
+  padding:5px 4px;cursor:pointer;font-family:inherit;border:2px solid var(--line);background:#fff}
+.wm-n{font-size:9px;font-weight:800;color:var(--ink-faint)}
+.wm-w{font-size:22px;line-height:1.4;color:var(--book-blue)}
+.wm-d{font-size:8.5px;font-weight:800;color:var(--ink-faint);text-transform:uppercase}
+.wm.today{background:#DDF3E6;border-color:var(--green)}
+.wm.today .wm-d{color:var(--chip-green)}
+.wm.earlier{background:#FFF6E3;border-color:#F3D79B}
+.wm.earlier .wm-d{color:var(--amber-dark)}
+.wm.due{background:#fff;border-style:dashed}
+.wm.here{outline:3px solid var(--coral);outline-offset:1px}
+.wm-key{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;font-size:10.5px;
+  font-weight:700;color:var(--ink-faint);margin-bottom:4px}
+.wm-key i{display:inline-block;width:14px;height:14px;border-radius:5px;vertical-align:-2px;
+  margin-inline-end:4px;padding:0}
 .watch-btn{font-size:13.5px}
 
 /* hint card — how the word was built */
-.hint-box{text-align:center}
+.hint-box{text-align:center;position:relative}
 .hint-full{font-size:62px;line-height:1.5;color:var(--book-blue);direction:rtl;margin:4px 0}
-.hint-split{font-size:12px;font-weight:800;color:var(--ink-faint);margin:2px 0 8px}
+/* arrows drawn from each letter of the word down to the piece it became */
+.hint-links{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:visible}
+.hint-split{font-size:12px;font-weight:800;color:var(--ink-faint);margin:26px 0 8px}
 .hcells{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;direction:rtl}
 .hcell{display:flex;flex-direction:column;align-items:center;gap:1px;
   background:#F4FAF8;border:2px solid #D8ECE7;border-radius:14px;padding:7px 11px;min-width:62px}
 .h-joined{font-size:40px;line-height:1.4;color:var(--book-blue);cursor:pointer;border-radius:8px}
 .h-joined:hover,.h-joined:focus-visible{background:#FFF3D6}
-.h-down{font-size:15px;color:var(--amber);line-height:1}
-.h-base{font-size:34px;line-height:1.4;color:#0F6B63}
+.h-base{font-size:34px;line-height:1.4;color:#0F6B63;
+  border-top:1px dashed #CFE0DB;padding-top:3px;margin-top:2px}
 .h-lbl{font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
 .hint-full .h,.h-joined .h,.h-base .h{color:var(--book-red)}
 
@@ -378,6 +401,9 @@ button.island:hover,button.island:focus-visible{border-color:var(--teal)}
 .gate-q{font-size:15px;font-weight:800;margin-bottom:10px}
 .gate-in{width:90px;font-size:20px;text-align:center;border:2px solid var(--line);border-radius:12px;
   padding:8px;font-family:inherit}
+/* deliberately loud, so a temporary testing setting cannot be shipped unnoticed */
+.test-warn{margin-top:10px;background:#FFF0D6;border:2px dashed var(--amber);border-radius:10px;
+  padding:7px 10px;font-size:11.5px;font-weight:800;color:var(--amber-dark);line-height:1.4}
 .setup b{font-size:14px;display:block;margin-bottom:6px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .chip{font-size:12.5px;font-weight:700;padding:5px 12px;border-radius:9px;border:0;cursor:pointer;font-family:inherit}

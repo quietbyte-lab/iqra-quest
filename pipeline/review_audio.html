@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Iqra Quest — words needing your ear</title>
+<style>
+  @font-face{font-family:'Amiri';src:url('../app/fonts/Amiri-Regular.woff2') format('woff2');font-display:block}
+  :root{--bg:#F4F6F5;--card:#fff;--ink:#1B302C;--soft:#576B66;--faint:#8B9A96;--line:#DEE6E3;
+    --teal:#0F6B63;--amber:#D98A0B;--green:#2C9C63;--blue:#23539E;--red:#C0442E}
+  @media(prefers-color-scheme:dark){:root{--bg:#0F1A18;--card:#182422;--ink:#E8F0ED;--soft:#9CB0AB;
+    --faint:#7A8C88;--line:#283835;--teal:#48B9AC;--blue:#83AEEC}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;font-size:15px}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:12px 18px}
+  h1{font-size:19px;margin:0 0 3px}
+  .sub{font-size:13px;color:var(--soft);max-width:80ch}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:13px}
+  main{padding:14px 18px 90px;max-width:940px;margin:0 auto}
+  h2{font-size:14px;color:var(--teal);margin:20px 0 6px}
+  .row{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:10px 13px;margin-bottom:8px}
+  .row.done{border-color:var(--green);background:color-mix(in srgb,var(--green) 8%,var(--card))}
+  .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .w{font-family:'Amiri',serif;font-size:40px;line-height:1.4;color:var(--blue);direction:rtl}
+  .meta{font-size:11.5px;color:var(--faint);font-weight:700}
+  .cand{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
+  button{font-family:inherit;font-weight:800;border:0;border-radius:10px;padding:7px 12px;font-size:13px;cursor:pointer}
+  .play{background:var(--teal);color:#fff}
+  .near{background:var(--bg);color:var(--soft);border:1px solid var(--line);font-size:12px;padding:6px 9px}
+  .pick{background:var(--green);color:#fff}
+  .none{background:#EFE3E0;color:var(--red)}
+  .heard{font-size:11.5px;color:var(--faint);margin-top:5px}
+  .foot{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);
+    padding:10px 18px;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap}
+  code{background:#0f6b6318;color:var(--teal);padding:2px 6px;border-radius:5px;font-size:12px}
+  .muted{color:var(--faint);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Words that need your ear 🎧</h1>
+  <div class="sub">These are the words where the machine could not confidently identify a clip —
+  mostly single letters, which speech recognition cannot read. Play the candidates and press
+  <b>✓ this one</b> when you hear the right word. Anything you skip keeps the device voice.</div>
+  <div class="bar">
+    <label><input type="checkbox" id="only-missing" checked> only words still missing audio</label>
+    <span id="prog" class="muted"></span>
+  </div>
+</header>
+<main id="list">Loading…</main>
+<div class="foot">
+  <button class="play" id="dl">⬇ Download my choices</button>
+  <span class="muted">save as <code>pipeline/manual_audio.json</code>, then tell Claude</span>
+</div>
+<script>
+const KEY='iqra-audio-review';
+let S=JSON.parse(localStorage.getItem(KEY)||'{}');
+const save=()=>localStorage.setItem(KEY,JSON.stringify(S));
+let ALIGN=[], CLIPS=[];
+const THRESH=0.55;
+
+Promise.all([
+  fetch('alignment_f5.json').then(r=>r.json()),
+  fetch('fast.json').then(r=>r.json())
+]).then(([a,f])=>{ ALIGN=a; CLIPS=f.f5.clips; draw(); })
+ .catch(e=>document.getElementById('list').innerHTML=
+   '<p>Could not load the alignment files. Serve the project root: '+
+   '<code>python -m http.server 8700</code> and open /pipeline/review_audio.html</p>');
+
+// Where to open the clip window for a word.
+// A fixed offset cannot work — the teacher talks between letters, so the gap between
+// a word and its clip keeps growing. Instead, follow the human: once a word is
+// confirmed, the NEXT word opens at the very next clip, and stray explanation is
+// stepped over with "later ▶". Falls back to the machine's guess when nothing is
+// confirmed above it yet.
+const clipIndexNear = row => {
+  const i = ALIGN.indexOf(row);
+  for (let k=i-1;k>=0;k--){
+    const picked = S[ALIGN[k].page+':'+ALIGN[k].wi];
+    if (picked && picked!=='none'){
+      const at = CLIPS.findIndex(x=>x.file===picked);
+      if (at>=0) return Math.min(at+1, CLIPS.length-1);
+    }
+  }
+  const manual = S['start:'+row.page];
+  if (manual!=null) {
+    const first = ALIGN.findIndex(x=>x.page===row.page);
+    return Math.min(+manual + (i-first), CLIPS.length-1);
+  }
+  for (let k=i;k>=0;k--){ const c=ALIGN[k].clip; if(c) return CLIPS.findIndex(x=>x.file===c); }
+  return 0;
+};
+function play(file){ new Audio('clips_fast/'+file.split('/').pop().replace(/^/,'f5/')).play().catch(()=>{}); }
+
+function draw(){
+  const onlyMissing=document.getElementById('only-missing').checked;
+  const list=document.getElementById('list'); list.innerHTML='';
+  let page=null, shown=0;
+  ALIGN.forEach((r,ri)=>{
+    const weak = r.score < THRESH;
+    if(onlyMissing && !weak) return;
+    if(S[r.page+':'+r.wi]==='none') { /* still show, marked */ }
+    if(r.page!==page){ page=r.page;
+      const h=document.createElement('h2');
+      const miss=ALIGN.filter(x=>x.page===page && x.score<THRESH).length;
+      h.textContent=`Page ${page} — ${miss} need checking`; list.appendChild(h); }
+    shown++;
+    const chosen=S[r.page+':'+r.wi];
+    const div=document.createElement('div');
+    div.className='row'+(chosen&&chosen!=='none'?' done':'');
+    const startIdx=Math.max(0, clipIndexNear(r));
+    div.innerHTML=`<div class="top">
+        <span class="w">${r.word}</span>
+        <span class="meta">page ${r.page} · word ${r.wi+1}${r.score?` · best guess ${r.score}`:''}</span>
+      </div>
+      ${r.heard?`<div class="heard">machine heard: “${r.heard}”</div>`:''}
+      <div class="cand" data-i="${startIdx}"></div>`;
+    const cand=div.querySelector('.cand');
+    const render=()=>{
+      const c=+cand.dataset.i;
+      cand.innerHTML='';
+      const back=document.createElement('button'); back.className='near'; back.textContent='◀ earlier';
+      back.onclick=()=>{cand.dataset.i=Math.max(0,c-1); render();};
+      cand.appendChild(back);
+      for(let k=c;k<Math.min(c+3,CLIPS.length);k++){
+        const b=document.createElement('button'); b.className='play';
+        b.textContent='▶ '+(k+1);
+        b.onclick=()=>{ new Audio('clips_fast/'+CLIPS[k].file).play().catch(()=>{}); };
+        const p=document.createElement('button'); p.className='pick'; p.textContent='✓ this one';
+        p.onclick=()=>{ S[r.page+':'+r.wi]=CLIPS[k].file; save(); draw(); };
+        cand.append(b,p);
+      }
+      const fwd=document.createElement('button'); fwd.className='near'; fwd.textContent='later ▶';
+      fwd.onclick=()=>{cand.dataset.i=Math.min(CLIPS.length-1,c+1); render();};
+      const no=document.createElement('button'); no.className='none'; no.textContent='skip';
+      no.onclick=()=>{ S[r.page+':'+r.wi]='none'; save(); draw(); };
+      cand.append(fwd,no);
+      // anchor the whole page here, for when you have found where a page begins
+      const anchor=document.createElement('button');
+      anchor.className='near'; anchor.textContent='⚑ page starts here';
+      anchor.title='Open every later word on this page from this clip onward';
+      anchor.onclick=()=>{ S['start:'+r.page]=c; save(); draw(); };
+      cand.appendChild(anchor);
+      if(chosen&&chosen!=='none'){
+        const tag=document.createElement('span'); tag.className='meta';
+        tag.textContent=' chosen: '+chosen; cand.appendChild(tag);
+      }
+    };
+    render();
+    list.appendChild(div);
+  });
+  if(!shown) list.innerHTML='<p class="muted">Nothing left to check 🎉</p>';
+  const picked=Object.values(S).filter(v=>v&&v!=='none').length;
+  const weak=ALIGN.filter(x=>x.score<THRESH).length;
+  document.getElementById('prog').textContent=`${picked} chosen · ${weak} words below the confidence bar`;
+}
+document.getElementById('only-missing').onchange=draw;
+document.getElementById('dl').onclick=()=>{
+  const out={};
+  for(const [k,v] of Object.entries(S)) if(v&&v!=='none') out[k]=v;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'}));
+  a.download='manual_audio.json'; a.click();
+};
+</script>
+</body>
+</html>
