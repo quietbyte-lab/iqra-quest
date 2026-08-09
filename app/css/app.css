@@ -234,12 +234,26 @@ button.island:hover,button.island:focus-visible{border-color:var(--teal)}
 .hcells{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;direction:rtl}
 .hcell{display:flex;flex-direction:column;align-items:center;gap:1px;
   background:#F4FAF8;border:2px solid #D8ECE7;border-radius:14px;padding:7px 11px;min-width:62px}
-.h-joined{font-size:40px;line-height:1.4;color:var(--book-blue);cursor:pointer;border-radius:8px}
+.h-joined{font-size:40px;line-height:1.4;cursor:pointer;border-radius:8px}
 .h-joined:hover,.h-joined:focus-visible{background:#FFF3D6}
-.h-base{font-size:34px;line-height:1.4;color:#0F6B63;
+.h-base{font-size:34px;line-height:1.4;
   border-top:1px dashed #CFE0DB;padding-top:3px;margin-top:2px}
+
 .h-lbl{font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
-.hint-full .h,.h-joined .h,.h-base .h{color:var(--book-red)}
+
+/* One colour per letter, carried through all three rows — the whole word, the joined
+   piece, and the plain letter — with the haraka in the letter's own colour. The colour
+   is what says "these are the same thing", so nothing here may repaint the marks red.
+   Declared last so it wins over the plain .hint-full / .h-joined / .h-base colours. */
+.hc0{--hc:#23539E}   /* blue    */
+.hc1{--hc:#0F8A5F}   /* green   */
+.hc2{--hc:#C2410C}   /* orange  */
+.hc3{--hc:#7C3AED}   /* violet  */
+.hc4{--hc:#B91C55}   /* magenta */
+.hc5{--hc:#0E7490}   /* teal    */
+.hw,.hcell .h-joined,.hcell .h-base{color:var(--hc)}
+.hcell{border-color:color-mix(in srgb,var(--hc) 42%,#fff)}
+.hcell .h-lbl{color:var(--ink-faint)}
 
 .parent-lbl{font-size:10px;color:#B3BCB8;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:center;margin-top:8px}
 /* one big star per correct reading -> flies into the counter */

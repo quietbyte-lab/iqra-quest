@@ -92,11 +92,18 @@ const clipIndexNear = row => {
 };
 function play(file){ new Audio('clips_fast/'+file.split('/').pop().replace(/^/,'f5/')).play().catch(()=>{}); }
 
+// ?pages=26,27 assigns a helper just those pages, so several people can share the work
+// without treading on each other. ?who=Sara labels the exported file.
+const QS = new URLSearchParams(location.search);
+const MINE = (QS.get('pages')||'').split(',').map(s=>+s.trim()).filter(Boolean);
+const WHO = (QS.get('who')||'').replace(/[^A-Za-z0-9_-]/g,'');
+
 function draw(){
   const onlyMissing=document.getElementById('only-missing').checked;
   const list=document.getElementById('list'); list.innerHTML='';
   let page=null, shown=0;
   ALIGN.forEach((r,ri)=>{
+    if(MINE.length && !MINE.includes(r.page)) return;
     const weak = r.score < THRESH;
     if(onlyMissing && !weak) return;
     if(S[r.page+':'+r.wi]==='none') { /* still show, marked */ }
@@ -160,8 +167,20 @@ document.getElementById('dl').onclick=()=>{
   for(const [k,v] of Object.entries(S)) if(v&&v!=='none') out[k]=v;
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'}));
-  a.download='manual_audio.json'; a.click();
+  // name the file after who did it and which pages, so several helpers' files merge cleanly
+  const bits=['manual_audio'];
+  if(WHO) bits.push(WHO);
+  if(MINE.length) bits.push('p'+MINE.join('-'));
+  a.download=bits.join('_')+'.json'; a.click();
 };
+// tell a helper up front which pages are theirs
+if(MINE.length||WHO){
+  const s=document.querySelector('header .sub');
+  s.insertAdjacentHTML('afterend',
+    `<div style="margin-top:8px;background:#FFF3D6;border:2px dashed #D98A0B;border-radius:10px;
+      padding:7px 11px;font-size:13px;font-weight:800;color:#8A5A00">
+      ${WHO?WHO+' — ':''}your pages: ${MINE.length?MINE.join(', '):'all'}</div>`);
+}
 </script>
 </body>
 </html>

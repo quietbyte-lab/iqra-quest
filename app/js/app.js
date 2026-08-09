@@ -515,9 +515,12 @@ function showHint(word) {
     const i = form.indexOf(base);
     return i < 0 ? form + marks : form.slice(0, i + base.length) + marks + form.slice(i + base.length);
   };
+  // Each letter keeps ONE colour across all three rows — in the whole word, in its
+  // joined piece, and as the plain letter — with its haraka in the same colour. The
+  // colour is the thread that says "this is the same thing", which is the whole point.
   const cells = parts.map((p, i) => {
     const f = formInWord(parts, i);
-    return `<div class="hcell">
+    return `<div class="hcell hc${i % 6}">
       <span class="h-joined arabic" data-say="${f.base}${p.marks}">${withMarks(f.form, f.base, p.marks)}</span>
       <span class="h-base arabic">${f.base}${p.marks}</span>
       <span class="h-lbl">${lbls[f.idx]}</span>
@@ -525,13 +528,18 @@ function showHint(word) {
   }).join('');
   // Each letter of the whole word is wrapped so an arrow can be drawn from it down to
   // its own piece — showing where each piece CAME FROM, which is the point of the card.
-  let wordHtml = '', li = -1;
+  // Keep each letter's span OPEN across its harakat, so the mark takes the letter's
+  // colour rather than being a separate red for every letter alike.
+  let wordHtml = '', li = -1, open = false;
   for (const ch of word) {
-    if (HARAKA_RE.test(ch)) { wordHtml += `<span class="h">${ch}</span>`; continue; }
+    if (HARAKA_RE.test(ch)) { wordHtml += ch; continue; }
     if (ch === 'ـ') { wordHtml += ch; continue; }
+    if (open) wordHtml += '</span>';
     li++;
-    wordHtml += `<span class="hw" data-i="${li}">${ch}</span>`;
+    wordHtml += `<span class="hw hc${li % 6}" data-i="${li}">${ch}`;
+    open = true;
   }
+  if (open) wordHtml += '</span>';
   const ov = overlay(`<div class="hint-box">
     <h4>${t('hintTitle')}</h4>
     <div class="hint-full arabic">${wordHtml}</div>
@@ -560,19 +568,23 @@ function drawHintLinks(box) {
   svg.setAttribute('width', br.width);
   svg.setAttribute('height', br.height);
   svg.setAttribute('viewBox', `0 0 ${br.width} ${br.height}`);
-  let d = '';
+  // Each arrow takes its own letter's colour, so the thread from word to piece is
+  // followed by eye as well as by position.
+  let d = '', defs = '';
   for (let i = 0; i < Math.min(letters.length, cells.length); i++) {
     const l = letters[i].getBoundingClientRect(), c = cells[i].getBoundingClientRect();
     const x1 = l.left + l.width / 2 - br.left, y1 = l.bottom - br.top - 6;
     const x2 = c.left + c.width / 2 - br.left, y2 = c.top - br.top - 3;
     const dy = Math.max(18, (y2 - y1) * 0.45);
-    d += `<path d="M${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}"
-      fill="none" stroke="var(--coral)" stroke-width="2.5" stroke-linecap="round"
-      marker-end="url(#hint-tip)"/>`;
-  }
-  svg.innerHTML = `<defs><marker id="hint-tip" viewBox="0 0 10 10" refX="7" refY="5"
+    const col = getComputedStyle(letters[i]).color;
+    defs += `<marker id="tip${i}" viewBox="0 0 10 10" refX="7" refY="5"
       markerWidth="4.5" markerHeight="4.5" orient="auto">
-      <path d="M0 0 L10 5 L0 10 z" fill="var(--coral)"/></marker></defs>${d}`;
+      <path d="M0 0 L10 5 L0 10 z" fill="${col}"/></marker>`;
+    d += `<path d="M${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}"
+      fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"
+      marker-end="url(#tip${i})"/>`;
+  }
+  svg.innerHTML = `<defs>${defs}</defs>${d}`;
 }
 
 // letter card popover
