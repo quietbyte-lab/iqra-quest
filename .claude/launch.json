@@ -4,13 +4,21 @@
     {
       "name": "iqra-quest",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8642", "--directory", "app"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8642",
+        "--directory",
+        "app"
+      ],
       "port": 8642
     },
     {
       "name": "verify-audio",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8700", "--directory", "pipeline"],
+      "runtimeArgs": [
+        "pipeline/review_server.py"
+      ],
       "port": 8700
     }
   ]

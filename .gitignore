@@ -26,5 +26,8 @@ app/audio/
 *.wav
 
 # ── Local only ─────────────────────────────────────────────────────────────
+# the review server keeps one backup beside each answer file
+*.json.bak
+*.json.tmp
 __pycache__/
 .claude/settings.local.json
