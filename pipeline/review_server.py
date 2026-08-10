@@ -91,6 +91,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(state())
         if route == '/favicon.ico':
             return self.send_json({}, 404)
+        if route in ('/', '/pipeline/', '/pipeline/review_audio.html'):
+            # this used to be served from the repository root, so old links kept
+            # /pipeline/ in them — send them on rather than showing a 404
+            self.send_response(302)
+            self.send_header('Location', '/review_audio.html')
+            self.end_headers()
+            return None
         return super().do_GET()
 
     def do_POST(self):
